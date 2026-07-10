@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-neutral-50 text-charcoal-900;
+  }
+}
+
+/* Premium Custom Utilities */
+.luxury-gradient {
+  background: linear-gradient(135deg, #4a0e17 0%, #801b27 50%, #2b050a 100%);
+}
+
+.gold-gradient {
+  background: linear-gradient(135deg, #d4af37 0%, #b58d27 50%, #8c681c 100%);
+}
+
+.cream-gradient {
+  background: linear-gradient(135deg, #fffef9 0%, #FFFDD0 100%);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.text-stroke-gold {
+  color: transparent;
+  -webkit-text-stroke: 1px #d4af37;
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Skeleton Keyframes */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
