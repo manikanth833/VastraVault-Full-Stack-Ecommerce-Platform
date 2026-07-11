@@ -19,6 +19,7 @@ class SellerDashboardView(views.APIView):
         # 1. Total products and low stock alerts
         products = Product.objects.filter(seller=seller)
         total_products = products.count()
+        active_products_count = products.filter(is_active=True).count()
         
         low_stock_variants = ProductVariant.objects.filter(
             product__seller=seller,
@@ -35,6 +36,7 @@ class SellerDashboardView(views.APIView):
         # 2. Sales and Revenue stats
         order_items = OrderItem.objects.filter(variant__product__seller=seller, order__status__in=["PROCESSING", "SHIPPED", "DELIVERED"])
         total_sales_count = order_items.aggregate(Sum("quantity"))["quantity__sum"] or 0
+        total_orders_count = order_items.values("order_id").distinct().count()
         total_revenue = sum(item.quantity * item.price for item in order_items)
 
         # 3. Recent orders
@@ -78,8 +80,10 @@ class SellerDashboardView(views.APIView):
 
         return Response({
             "total_products": total_products,
+            "active_products_count": active_products_count,
             "low_stock_count": low_stock_count,
             "total_sales_count": total_sales_count,
+            "total_orders_count": total_orders_count,
             "total_revenue": str(total_revenue),
             "recent_orders": recent_orders,
             "monthly_sales": monthly_revenue_data[:6],

@@ -481,12 +481,11 @@ export default function SellerDashboard() {
         </div>
       </div>
 
-      {error && (
+      {error && !Stats && products.length === 0 ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {error}
         </div>
-      )}
-
+      ) : null}
       {successMessage && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           {successMessage}
@@ -623,7 +622,7 @@ export default function SellerDashboard() {
         </>
       )}
 
-      <section className="space-y-6 rounded-[28px] border border-royal-red-100 bg-white p-6 shadow-sm">
+      <section id="seller-products" className="space-y-6 rounded-[28px] border border-royal-red-100 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-5 border-b border-neutral-100 pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-gold-600">
@@ -684,33 +683,38 @@ export default function SellerDashboard() {
         ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
             {sortedProducts.map((product) => (
-              <article key={product.id} className="overflow-hidden rounded-2xl border border-neutral-100 bg-white shadow-sm transition-shadow hover:shadow-md">
-                <div className="aspect-[4/3] bg-neutral-100">
+              <article key={product.id} className="group flex h-full flex-col overflow-hidden rounded-[24px] border border-neutral-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                <div className="relative aspect-[3/4] overflow-hidden bg-neutral-100">
                   <PremiumImage
                     src={product.primary_image || ""}
                     alt={product.name}
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-cover object-top transition-transform duration-700 group-hover:scale-[1.04]"
                     fallbackTitle={product.brand || sellerLabel}
                     fallbackSubtitle={product.category_name || "Heritage Sarees"}
                   />
-                </div>
-                <div className="space-y-4 p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <h3 className="font-serif text-xl font-bold text-charcoal-900">{product.name}</h3>
-                      <p className="text-xs uppercase tracking-[0.25em] text-gold-600">
-                        {product.category_name || "Uncategorized"}
-                      </p>
-                    </div>
+                  <div className="absolute left-4 top-4">
                     <span
-                      className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                      className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em] backdrop-blur-sm ${
                         product.is_active
-                          ? "border border-emerald-100 bg-emerald-50 text-emerald-700"
-                          : "border border-neutral-200 bg-neutral-100 text-neutral-500"
+                          ? "border-emerald-100 bg-emerald-50/90 text-emerald-700"
+                          : "border-neutral-200 bg-white/90 text-neutral-500"
                       }`}
                     >
                       {product.is_active ? "Active" : "Draft"}
                     </span>
+                  </div>
+                  <div className="absolute bottom-4 left-4 rounded-full border border-white/20 bg-black/35 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-white backdrop-blur-sm">
+                    Stock {product.stock_qty ?? 0}
+                  </div>
+                </div>
+                <div className="flex flex-1 flex-col space-y-4 p-5">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-gold-600">
+                      {product.category_name || "Uncategorized"}
+                    </p>
+                    <h3 className="font-serif text-xl font-semibold leading-snug text-charcoal-900 transition-colors group-hover:text-royal-red-900">
+                      {product.name}
+                    </h3>
                   </div>
 
                   <p className="line-clamp-2 text-sm leading-6 text-neutral-500">
@@ -718,23 +722,23 @@ export default function SellerDashboard() {
                   </p>
 
                   <div className="grid grid-cols-3 gap-3 text-xs">
-                    <div className="rounded-xl bg-neutral-50 p-3">
+                    <div className="rounded-2xl bg-neutral-50 p-3">
                       <p className="uppercase tracking-[0.2em] text-neutral-400">Price</p>
                       <p className="mt-1 font-bold text-charcoal-900">
                         ₹{parseFloat(product.base_price).toLocaleString("en-IN")}
                       </p>
                     </div>
-                    <div className="rounded-xl bg-neutral-50 p-3">
+                    <div className="rounded-2xl bg-neutral-50 p-3">
                       <p className="uppercase tracking-[0.2em] text-neutral-400">Stock</p>
                       <p className="mt-1 font-bold text-charcoal-900">{product.stock_qty ?? 0}</p>
                     </div>
-                    <div className="rounded-xl bg-neutral-50 p-3">
+                    <div className="rounded-2xl bg-neutral-50 p-3">
                       <p className="uppercase tracking-[0.2em] text-neutral-400">Brand</p>
                       <p className="mt-1 truncate font-bold text-charcoal-900">{product.brand || sellerLabel}</p>
                     </div>
                   </div>
 
-                  <div className="flex gap-3 pt-1">
+                  <div className="mt-auto flex gap-3 pt-1">
                     <button
                       onClick={() => openEditProductModal(product)}
                       className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-neutral-200 px-4 py-3 text-sm font-semibold text-charcoal-700 transition-colors hover:border-royal-red-200 hover:text-royal-red-900"

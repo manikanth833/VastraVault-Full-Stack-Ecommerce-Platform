@@ -4,6 +4,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from apps.authentication.views import (
     RegisterView,
     CustomTokenObtainPairView,
+    ForgotPasswordView,
+    ResetPasswordView,
     UserProfileView,
     AddressViewSet
 )
@@ -18,6 +20,8 @@ router.register("addresses", AddressViewSet, basename="address")
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
     path("login/", CustomTokenObtainPairView.as_view(), name="login"),
+    path("forgot-password/", ForgotPasswordView.as_view(), name="forgot-password"),
+    path("reset-password/", ResetPasswordView.as_view(), name="reset-password"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("profile/", UserProfileView.as_view(), name="profile"),
     path("dashboard/seller/", SellerDashboardView.as_view(), name="seller-dashboard"),

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { ShoppingBag, Heart, User, LogOut, Menu, X, BarChart3, ShieldCheck } from "lucide-react";
 import { logout } from "../features/authSlice";
@@ -7,12 +7,17 @@ import { clearCartLocal } from "../features/cartSlice";
 
 export default function Navbar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useDispatch();
   const { isAuthenticated, user } = useSelector((state) => state.auth);
   const { cart } = useSelector((state) => state.cart);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const cartItemCount = cart?.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
+  const isSeller = user?.role_name === "SELLER";
+  const isAdmin = user?.role_name === "ADMIN";
+  const isCustomer = isAuthenticated && !isSeller && !isAdmin;
+  const isSellerDashboardPage = location.pathname.startsWith("/seller-dashboard");
 
   const handleLogout = () => {
     dispatch(logout());
@@ -20,12 +25,24 @@ export default function Navbar() {
     navigate("/");
   };
 
-  const isSeller = user?.role_name === "SELLER";
-  const isAdmin = user?.role_name === "ADMIN";
-  const isCustomer = isAuthenticated && !isSeller && !isAdmin;
+  const navLinkBase =
+    "relative inline-flex items-center gap-1 rounded-full px-4 py-2 text-sm font-medium transition-colors";
+  const navLinkClass = (isActive) =>
+    `${navLinkBase} ${isActive ? "bg-royal-red-50 text-royal-red-900" : "text-charcoal-700 hover:bg-neutral-50 hover:text-royal-red-900"}`;
+  const sellerDashboardNavClass = isSellerDashboardPage
+    ? "inline-flex items-center gap-1 rounded-full border border-royal-red-200 bg-royal-red-900 px-4 py-2 text-sm font-semibold text-white shadow-sm"
+    : "inline-flex items-center gap-1 rounded-full border border-amber-100 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition-colors hover:border-royal-red-200 hover:text-royal-red-900";
+  const getSellerDisplayName = (seller) => {
+    const shopName = seller?.shop_name?.trim();
+    const fullName = [seller?.first_name?.trim(), seller?.last_name?.trim()].filter(Boolean).join(" ").trim();
+    const emailPrefix = seller?.email?.split("@")?.[0]?.trim();
+    return shopName || fullName || emailPrefix || seller?.username || "Seller Account";
+  };
+  const sellerDisplayName = getSellerDisplayName(user);
+  const sellerAccountLink = "/seller-account";
 
   return (
-    <nav className="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-royal-red-100 shadow-sm transition-all duration-300">
+    <nav className="sticky top-0 z-50 border-b border-royal-red-100 bg-white/90 shadow-sm backdrop-blur-md transition-all duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-20 items-center">
           {/* Logo */}
@@ -38,20 +55,25 @@ export default function Navbar() {
                 Heritage Sarees
               </span>
             </Link>
+            {isSellerDashboardPage && (
+              <span className="ml-4 hidden rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-amber-700 md:inline-flex">
+                Seller Workspace
+              </span>
+            )}
           </div>
 
           {/* Desktop Navigation Links */}
-          <div className="hidden md:flex space-x-8 items-center">
-            <Link to="/" className="text-charcoal-700 hover:text-royal-red-900 font-medium tracking-wide transition-colors">
+          <div className="hidden md:flex items-center space-x-2">
+            <Link to="/" className={navLinkClass(location.pathname === "/")}>
               Home
             </Link>
-            <Link to="/catalog" className="text-charcoal-700 hover:text-royal-red-900 font-medium tracking-wide transition-colors">
+            <Link to="/catalog" className={navLinkClass(location.pathname.startsWith("/catalog"))}>
               Collections
             </Link>
-            <Link to="/catalog?category=silk-sarees" className="text-charcoal-700 hover:text-royal-red-900 font-medium tracking-wide transition-colors">
+            <Link to="/catalog?category=silk-sarees" className={navLinkClass(location.search.includes("silk-sarees"))}>
               Pure Silk
             </Link>
-            <Link to="/catalog?category=cotton-linen" className="text-charcoal-700 hover:text-royal-red-900 font-medium tracking-wide transition-colors">
+            <Link to="/catalog?category=cotton-linen" className={navLinkClass(location.search.includes("cotton-linen"))}>
               Linen & Cotton
             </Link>
           </div>
@@ -60,21 +82,36 @@ export default function Navbar() {
           <div className="hidden md:flex items-center space-x-6">
             {isAdmin ? (
               <>
-                <Link to="/admin-dashboard" className="flex items-center gap-1 text-charcoal-700 hover:text-royal-red-900 transition-colors">
+                <Link to="/admin-dashboard" className="flex items-center gap-1 rounded-full border border-amber-100 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition-colors hover:border-royal-red-200 hover:text-royal-red-900">
                   <ShieldCheck className="w-5 h-5 text-gold-500" />
-                  <span className="text-xs font-semibold text-gold-600">Admin Dashboard</span>
+                  <span>Admin Dashboard</span>
                 </Link>
               </>
             ) : isSeller ? (
               <>
-                <Link to="/seller-dashboard" className="flex items-center gap-1 text-charcoal-700 hover:text-royal-red-900 transition-colors">
+                <Link
+                  to="/seller-dashboard"
+                  className={sellerDashboardNavClass}
+                >
                   <BarChart3 className="w-5 h-5 text-gold-500" />
-                  <span className="text-xs font-semibold text-gold-600">Seller Dashboard</span>
+                  <span>Seller Dashboard</span>
                 </Link>
 
-                <Link to="/profile" className="flex items-center gap-1 text-charcoal-700 hover:text-royal-red-900 transition-colors">
-                  <User className="w-6 h-6 stroke-[1.5]" />
-                  <span className="text-sm font-medium hidden lg:inline">{user?.shop_name || user?.first_name}</span>
+                <Link
+                  to={sellerAccountLink}
+                  className="inline-flex items-center gap-3 rounded-full border border-amber-100 bg-amber-50/90 px-4 py-2.5 text-left transition-colors hover:border-royal-red-200 hover:bg-white"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-royal-red-900 text-[10px] font-semibold uppercase tracking-[0.3em] text-white">
+                    {sellerDisplayName.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-charcoal-900">
+                      {sellerDisplayName}
+                    </p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-amber-700">
+                      Seller Account
+                    </p>
+                  </div>
                 </Link>
 
                 <button
@@ -86,11 +123,11 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                <Link to="/wishlist" className="text-charcoal-700 hover:text-royal-red-900 transition-colors relative">
+                <Link to="/wishlist" className="relative text-charcoal-700 transition-colors hover:text-royal-red-900">
                   <Heart className="w-6 h-6 stroke-[1.5]" />
                 </Link>
 
-                <Link to="/cart" className="text-charcoal-700 hover:text-royal-red-900 transition-colors relative">
+                <Link to="/cart" className="relative text-charcoal-700 transition-colors hover:text-royal-red-900">
                   <ShoppingBag className="w-6 h-6 stroke-[1.5]" />
                   {cartItemCount > 0 && (
                     <span className="absolute -top-2 -right-2 bg-royal-red-900 text-white font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center border-2 border-white">
@@ -101,9 +138,9 @@ export default function Navbar() {
 
                 {isCustomer ? (
                   <div className="flex items-center gap-4">
-                    <Link to="/profile" className="flex items-center gap-1 text-charcoal-700 hover:text-royal-red-900 transition-colors">
+                    <Link to="/profile" className="inline-flex items-center gap-1 rounded-full px-4 py-2 text-sm font-medium text-charcoal-700 transition-colors hover:bg-neutral-50 hover:text-royal-red-900">
                       <User className="w-6 h-6 stroke-[1.5]" />
-                      <span className="text-sm font-medium hidden lg:inline">{user?.first_name}</span>
+                      <span className="hidden lg:inline">{user?.first_name}</span>
                     </Link>
                     <button onClick={handleLogout} className="text-charcoal-500 hover:text-royal-red-900 transition-colors">
                       <LogOut className="w-5 h-5" />
@@ -127,9 +164,9 @@ export default function Navbar() {
                 )}
 
                 {isSeller && (
-                  <Link to="/seller-dashboard" className="flex items-center gap-1 text-charcoal-700 hover:text-royal-red-900 transition-colors">
+                  <Link to="/seller-dashboard" className={sellerDashboardNavClass}>
                     <BarChart3 className="w-5 h-5 text-gold-500" />
-                    <span className="text-xs font-semibold text-gold-600">Seller Hub</span>
+                    <span>{isSellerDashboardPage ? "Seller Dashboard" : "Seller Hub"}</span>
                   </Link>
                 )}
               </>
@@ -139,14 +176,17 @@ export default function Navbar() {
           {/* Mobile menu button */}
           <div className="md:hidden flex items-center space-x-4">
             {isAdmin ? (
-              <Link to="/admin-dashboard" className="text-gold-600 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider">
+              <Link to="/admin-dashboard" className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-amber-700">
                 <ShieldCheck className="w-5 h-5" />
                 Admin
               </Link>
             ) : isSeller ? (
-              <Link to="/seller-dashboard" className="text-gold-600 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider">
+              <Link
+                to="/seller-dashboard"
+                className={`flex items-center gap-1 text-xs font-semibold uppercase tracking-wider ${isSellerDashboardPage ? "text-royal-red-900" : "text-amber-700"}`}
+              >
                 <BarChart3 className="w-5 h-5" />
-                Seller
+                {isSellerDashboardPage ? "Dashboard" : "Seller"}
               </Link>
             ) : (
               <Link to="/cart" className="text-charcoal-700 relative">
@@ -184,17 +224,21 @@ export default function Navbar() {
           <hr className="border-royal-red-50" />
           {isAdmin ? (
             <>
-              <Link to="/admin-dashboard" onClick={() => setMobileMenuOpen(false)} className="block text-gold-600 hover:text-royal-red-900 text-base font-medium">
+              <Link to="/admin-dashboard" onClick={() => setMobileMenuOpen(false)} className="block text-amber-700 hover:text-royal-red-900 text-base font-medium">
                 Admin Dashboard
               </Link>
             </>
           ) : isSeller ? (
             <>
-              <Link to="/seller-dashboard" onClick={() => setMobileMenuOpen(false)} className="block text-gold-600 hover:text-royal-red-900 text-base font-medium">
+              <Link
+                to="/seller-dashboard"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`block text-base font-medium ${isSellerDashboardPage ? "text-royal-red-900" : "text-amber-700"}`}
+              >
                 Seller Dashboard
               </Link>
-              <Link to="/profile" onClick={() => setMobileMenuOpen(false)} className="block text-charcoal-700 hover:text-royal-red-900 text-base font-medium">
-                {user?.shop_name || user?.first_name || "Seller Profile"}
+              <Link to={sellerAccountLink} onClick={() => setMobileMenuOpen(false)} className="block text-charcoal-700 hover:text-royal-red-900 text-base font-medium">
+                {sellerDisplayName}
               </Link>
               <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="w-full text-left text-charcoal-500 hover:text-royal-red-900 text-base font-medium flex items-center gap-2">
                 <LogOut className="w-5 h-5" /> Logout
@@ -214,11 +258,11 @@ export default function Navbar() {
             </>
          ) : (
   <div className="space-y-3">
-    <Link
-      to="/login"
-      onClick={() => setMobileMenuOpen(false)}
-      className="block text-center border border-royal-red-900 text-royal-red-900 font-medium py-3 rounded-full text-base"
-    >
+            <Link
+              to="/login"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block text-center border border-royal-red-900 text-royal-red-900 font-medium py-3 rounded-full text-base"
+            >
       Sign In
     </Link>
     <Link

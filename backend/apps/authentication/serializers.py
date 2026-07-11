@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password as django_validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from apps.authentication.models import Role, Permission
 from apps.orders.models import Address
@@ -52,6 +54,13 @@ class RegisterSerializer(serializers.ModelSerializer):
             "shop_description"
         ]
 
+    def validate_password(self, value):
+        try:
+            django_validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
+        return value
+
     def create(self, validated_data):
         role_name = validated_data.pop("role_name", Role.CUSTOMER)
         password = validated_data.pop("password")
@@ -73,6 +82,22 @@ class RegisterSerializer(serializers.ModelSerializer):
             shop_description=validated_data.get("shop_description", "") if role_name == Role.SELLER else None
         )
         return user
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_password(self, value):
+        try:
+            django_validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
+        return value
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod

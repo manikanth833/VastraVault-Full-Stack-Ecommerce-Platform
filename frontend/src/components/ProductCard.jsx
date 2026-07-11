@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import PremiumImage from "./PremiumImage";
 
 export default function ProductCard({ product, onWishlistToggle, isWishlisted }) {
-  const imageUrl = product.primary_image || "";
+  const imageUrl = product.primary_image?.trim?.() || "";
 
   return (
     <motion.div

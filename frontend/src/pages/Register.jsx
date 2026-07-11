@@ -25,6 +25,34 @@ export default function Register() {
   
   const [success, setSuccess] = useState(false);
 
+  const getRegistrationError = () => {
+    if (!error) return "";
+    if (typeof error === "string") return error;
+
+    const messages = [];
+
+    if (Array.isArray(error?.email)) {
+      messages.push(...error.email);
+    }
+
+    if (Array.isArray(error?.password)) {
+      messages.push(...error.password);
+    }
+
+    if (typeof error === "object") {
+      Object.entries(error).forEach(([key, value]) => {
+        if (key === "email" || key === "password") return;
+        if (Array.isArray(value)) {
+          messages.push(...value);
+        } else if (value) {
+          messages.push(String(value));
+        }
+      });
+    }
+
+    return messages.filter(Boolean).join(" ") || "Registration failed";
+  };
+
   useEffect(() => {
     dispatch(clearError());
   }, [dispatch]);
@@ -103,9 +131,9 @@ export default function Register() {
                 <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg text-xs font-semibold flex items-center gap-2">
                   <ShieldAlert className="w-5 h-5 shrink-0" />
                   <p>
-                   {error?.email?.[0]
-                       ? "This email is already registered."
-                        : error}
+                    {error?.email?.[0]
+                      ? "This email is already registered."
+                      : getRegistrationError()}
                   </p>
                 </div>
               )}

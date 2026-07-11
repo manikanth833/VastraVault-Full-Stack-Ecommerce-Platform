@@ -10,9 +10,12 @@ import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import OrderSuccess from "./pages/OrderSuccess";
 import Profile from "./pages/Profile";
+import SellerAccount from "./pages/SellerAccount";
 import SellerDashboard from "./pages/SellerDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Register from "./pages/Register";
 import { fetchCart } from "./features/cartSlice";
 
@@ -29,6 +32,16 @@ function ProtectedRoute({ children, allowedRoles }) {
   }
 
   return children;
+}
+
+function ProfileRoute() {
+  const { user } = useSelector((state) => state.auth);
+
+  if (user?.role_name === "SELLER") {
+    return <Navigate to="/seller-account" replace />;
+  }
+
+  return <Profile />;
 }
 
 function CustomerLayout() {
@@ -62,6 +75,8 @@ export default function App() {
           <Route path="/products/:slug" element={<ProductDetails />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:uid/:token" element={<ResetPassword />} />
           <Route path="/register" element={<Register />} />
 
           {/* Authenticated Customer Routes */}
@@ -85,7 +100,15 @@ export default function App() {
             path="/profile"
             element={
               <ProtectedRoute allowedRoles={["CUSTOMER", "SELLER", "ADMIN"]}>
-                <Profile />
+                <ProfileRoute />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seller-account"
+            element={
+              <ProtectedRoute allowedRoles={["SELLER"]}>
+                <SellerAccount />
               </ProtectedRoute>
             }
           />
