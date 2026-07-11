@@ -1,0 +1,28 @@
+# Environment files
+.env
+backend/.env
+frontend/.env
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Python
+__pycache__/
+*.pyc
+
+# Database
+db.sqlite3
+backend/db.sqlite3
+
+# Build output
+dist/
+frontend/dist/
+
+# Virtual environments
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
