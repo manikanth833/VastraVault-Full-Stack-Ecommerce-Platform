@@ -6,6 +6,9 @@ from apps.authentication.views import (
     CustomTokenObtainPairView,
     ForgotPasswordView,
     ResetPasswordView,
+    ResendVerificationView,
+    VerifyEmailView,
+    VerifyEmailOtpView,
     UserProfileView,
     AddressViewSet
 )
@@ -22,6 +25,9 @@ urlpatterns = [
     path("login/", CustomTokenObtainPairView.as_view(), name="login"),
     path("forgot-password/", ForgotPasswordView.as_view(), name="forgot-password"),
     path("reset-password/", ResetPasswordView.as_view(), name="reset-password"),
+    path("resend-verification/", ResendVerificationView.as_view(), name="resend-verification"),
+    path("verify-email-otp/", VerifyEmailOtpView.as_view(), name="verify-email-otp"),
+    path("verify-email/", VerifyEmailView.as_view(), name="verify-email"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("profile/", UserProfileView.as_view(), name="profile"),
     path("dashboard/seller/", SellerDashboardView.as_view(), name="seller-dashboard"),

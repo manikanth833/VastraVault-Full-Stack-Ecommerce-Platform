@@ -17,9 +17,10 @@ import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Register from "./pages/Register";
+import EmailVerificationPending from "./pages/EmailVerificationPending";
+import EmailVerified from "./pages/EmailVerified";
 import { fetchCart } from "./features/cartSlice";
 
-// Frontend Role-Based Access Control wrapper
 function ProtectedRoute({ children, allowedRoles }) {
   const { isAuthenticated, user } = useSelector((state) => state.auth);
 
@@ -60,7 +61,6 @@ export default function App() {
   const dispatch = useDispatch();
   const { isAuthenticated } = useSelector((state) => state.auth);
 
-  // Initialize cart state
   useEffect(() => {
     dispatch(fetchCart());
   }, [dispatch, isAuthenticated]);
@@ -69,7 +69,6 @@ export default function App() {
     <Router>
       <Routes>
         <Route element={<CustomerLayout />}>
-          {/* Public Customer Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/catalog" element={<Catalog />} />
           <Route path="/products/:slug" element={<ProductDetails />} />
@@ -77,9 +76,10 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:uid/:token" element={<ResetPassword />} />
+          <Route path="/verify-email-pending" element={<EmailVerificationPending />} />
+          <Route path="/verify-email/:uid/:token" element={<EmailVerified />} />
           <Route path="/register" element={<Register />} />
 
-          {/* Authenticated Customer Routes */}
           <Route
             path="/checkout"
             element={
@@ -112,8 +112,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* Seller Hub Routes */}
           <Route
             path="/seller-dashboard"
             element={
@@ -124,7 +122,6 @@ export default function App() {
           />
         </Route>
 
-        {/* Admin Moderator Route */}
         <Route
           path="/admin-dashboard"
           element={
@@ -134,7 +131,6 @@ export default function App() {
           }
         />
 
-        {/* Fallback to Home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

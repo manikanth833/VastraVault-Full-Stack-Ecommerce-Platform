@@ -68,6 +68,15 @@ class User(AbstractUser):
     
     # Seller fields
     is_approved_seller = models.BooleanField(default=False)
+    is_email_verified = models.BooleanField(default=False)
+    # Store a salted hash of the OTP; never persist the plaintext code.
+    email_otp_hash = models.CharField(max_length=128, null=True, blank=True)
+    # 10-minute verification window for the current OTP.
+    email_otp_expires_at = models.DateTimeField(null=True, blank=True)
+    # Brute-force lockout counter for 6-digit OTP attempts.
+    email_otp_attempts = models.PositiveSmallIntegerField(default=0)
+    # Increments on every new verification email so old links and OTPs become invalid.
+    email_verification_generation = models.PositiveIntegerField(default=0)
     shop_name = models.CharField(max_length=255, blank=True, null=True)
     shop_description = models.TextField(blank=True, null=True)
     

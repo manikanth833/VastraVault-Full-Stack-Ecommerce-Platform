@@ -32,11 +32,12 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "role_name",
             "is_approved_seller",
+            "is_email_verified",
             "shop_name",
             "shop_description",
             "created_at"
         ]
-        read_only_fields = ["id", "is_approved_seller", "created_at"]
+        read_only_fields = ["id", "is_approved_seller", "is_email_verified", "created_at"]
 
 class RegisterSerializer(serializers.ModelSerializer):
     role_name = serializers.ChoiceField(choices=[Role.CUSTOMER, Role.SELLER], default=Role.CUSTOMER)
@@ -99,6 +100,25 @@ class ResetPasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError(exc.messages)
         return value
 
+
+class ResendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+
+
+class VerifyEmailOtpSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.RegexField(
+        regex=r"^\d{6}$",
+        error_messages={
+            "invalid": "Enter the 6-digit code exactly as received.",
+        },
+    )
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
@@ -107,6 +127,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token["email"] = user.email
         token["role"] = user.role.name if user.role else None
         token["is_approved_seller"] = user.is_approved_seller
+        token["is_email_verified"] = user.is_email_verified
         return token
 
     def validate(self, attrs):
