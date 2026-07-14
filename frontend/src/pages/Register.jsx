@@ -4,6 +4,25 @@ import { useSelector, useDispatch } from "react-redux";
 import { User, Mail, Lock, Store, Info, ShieldAlert } from "lucide-react";
 import { registerUser, clearError } from "../features/authSlice";
 
+function getThrottleErrorMessage(error) {
+  const detail = typeof error === "string" ? error : error?.detail;
+
+  if (typeof detail !== "string") {
+    return "";
+  }
+
+  const secondsMatch = detail.match(/(\d+)\s+seconds?/i);
+  if (secondsMatch) {
+    return `Too many attempts. Please wait ${secondsMatch[1]} seconds and try again.`;
+  }
+
+  if (/throttl|too many attempts/i.test(detail)) {
+    return "Too many attempts. Please wait a moment before trying again.";
+  }
+
+  return "";
+}
+
 export default function Register() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -22,6 +41,10 @@ export default function Register() {
 
   const getRegistrationError = () => {
     if (!error) return "";
+
+    const throttleMessage = getThrottleErrorMessage(error);
+    if (throttleMessage) return throttleMessage;
+
     if (typeof error === "string") return error;
 
     const messages = [];

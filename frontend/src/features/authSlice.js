@@ -17,7 +17,7 @@ export const login = createAsyncThunk("auth/login", async (credentials, { reject
     
     return res.data.user;
   } catch (error) {
-    return rejectWithValue(error.response?.data?.detail || "Invalid email or password");
+    return rejectWithValue(error.response?.data || "Invalid email or password");
   }
 });
 

@@ -28,6 +28,7 @@ from apps.authentication.utils import (
     send_verification_email,
     OTP_MAX_ATTEMPTS,
 )
+from apps.authentication.throttling import ForgotPasswordRateThrottle, LoginRateThrottle
 from apps.orders.models import Address
 
 User = get_user_model()
@@ -36,6 +37,8 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "register"
 
     def perform_create(self, serializer):
         user = serializer.save()
@@ -43,12 +46,14 @@ class RegisterView(generics.CreateAPIView):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [LoginRateThrottle]
 
 
 class ForgotPasswordView(generics.GenericAPIView):
     serializer_class = ForgotPasswordSerializer
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [ForgotPasswordRateThrottle]
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)

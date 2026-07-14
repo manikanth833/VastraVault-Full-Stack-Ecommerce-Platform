@@ -30,6 +30,11 @@ export default function ForgotPassword() {
       const res = await api.post("/api/auth/forgot-password/", { email });
       setMessage(res.data?.detail || "If an account exists with this email, password reset instructions have been sent.");
     } catch (err) {
+      if (err.response?.status === 429) {
+        setError("Too many attempts. Please wait a moment before trying again.");
+        return;
+      }
+
       setError(formatError(err.response?.data?.detail || err.response?.data) || "Unable to process your request right now.");
     } finally {
       setLoading(false);

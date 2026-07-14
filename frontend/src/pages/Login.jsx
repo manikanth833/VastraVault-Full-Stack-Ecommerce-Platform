@@ -4,6 +4,42 @@ import { useSelector, useDispatch } from "react-redux";
 import { Mail, Lock, ShieldAlert, Sparkles } from "lucide-react";
 import { login, clearError } from "../features/authSlice";
 
+function getThrottleErrorMessage(error) {
+  const detail = typeof error === "string" ? error : error?.detail;
+
+  if (typeof detail !== "string") {
+    return "";
+  }
+
+  const secondsMatch = detail.match(/(\d+)\s+seconds?/i);
+  if (secondsMatch) {
+    return `Too many attempts. Please wait ${secondsMatch[1]} seconds and try again.`;
+  }
+
+  if (/throttl|too many attempts/i.test(detail)) {
+    return "Too many attempts. Please wait a moment before trying again.";
+  }
+
+  return "";
+}
+
+function getLoginErrorMessage(error) {
+  if (!error) return "";
+
+  const throttleMessage = getThrottleErrorMessage(error);
+  if (throttleMessage) return throttleMessage;
+
+  if (typeof error === "string") return error;
+
+  if (typeof error === "object") {
+    if (Array.isArray(error?.detail)) return error.detail.join(" ");
+    if (typeof error?.detail === "string") return error.detail;
+    if (Array.isArray(error?.non_field_errors)) return error.non_field_errors.join(" ");
+  }
+
+  return "Invalid email or password";
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -50,7 +86,7 @@ export default function Login() {
       <form onSubmit={handleSubmit} className="bg-white border border-neutral-100 p-8 rounded-xl shadow-sm space-y-6">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg text-xs font-semibold flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 shrink-0" /> {error}
+            <ShieldAlert className="w-5 h-5 shrink-0" /> {getLoginErrorMessage(error)}
           </div>
         )}
 
