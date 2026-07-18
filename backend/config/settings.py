@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
+from csp.constants import SELF
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -16,7 +17,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-default-key-for-devel
 
 DEBUG = os.environ.get("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 # Application definition
 
@@ -31,6 +32,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "django_filters",
+    "csp",
     # Local Apps
     "apps.authentication",
     "apps.products",
@@ -41,6 +43,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "csp.middleware.CSPMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -142,9 +145,48 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = True  # In production, restrict to frontend URL
+# CORS / CSRF Configuration
+CORS_ALLOWED_ORIGINS = os.environ.get(
+    "CORS_ALLOWED_ORIGINS", "http://localhost:5173"
+).split(",")
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = os.environ.get(
+    "CSRF_TRUSTED_ORIGINS", "http://localhost:5173"
+).split(",")
+
+# Security headers default to safe local-dev values and can be enabled via .env
+SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "False") == "True"
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "False") == "True"
+CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "False") == "True"
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
+SECURE_REFERRER_POLICY = "same-origin"
+
+# Report-only mode logs violations to the browser console without blocking requests.
+# Keep this enabled until the real frontend has been manually tested with the policy active
+# and no unexpected violations appear in the console. Only then switch it off.
+CSP_REPORT_ONLY_ENABLED = os.environ.get("CSP_REPORT_ONLY", "True") == "True"
+
+CSP_POLICY = {
+    "DIRECTIVES": {
+        "default-src": [SELF],
+        "img-src": [SELF, "res.cloudinary.com"],
+        "script-src": [SELF, "checkout.razorpay.com"],
+        "frame-src": [SELF, "checkout.razorpay.com"],
+        "connect-src": [SELF, "api.razorpay.com"],
+        "style-src": [SELF, "fonts.googleapis.com"],
+        "font-src": [SELF, "fonts.gstatic.com"],
+    },
+}
+
+if CSP_REPORT_ONLY_ENABLED:
+    CONTENT_SECURITY_POLICY_REPORT_ONLY = CSP_POLICY
+else:
+    CONTENT_SECURITY_POLICY = CSP_POLICY
 
 # Django REST Framework Settings
 REST_FRAMEWORK = {

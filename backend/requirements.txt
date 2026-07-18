@@ -12,3 +12,4 @@ pillow>=10.2
 gunicorn>=21.2
 django-filter>=24.2
 django-redis>=5.4.0
+django-csp==4.0
