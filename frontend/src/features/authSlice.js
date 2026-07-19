@@ -1,20 +1,31 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../services/api";
 
-export const login = createAsyncThunk("auth/login", async (credentials, { rejectWithValue, dispatch }) => {
+const GUEST_CART_TOKEN_KEY = "guestCartToken";
+const USER_STORAGE_KEY = "user";
+const ACCESS_TOKEN_KEY = "accessToken";
+const REFRESH_TOKEN_KEY = "refreshToken";
+
+export const login = createAsyncThunk("auth/login", async (credentials, { rejectWithValue }) => {
   try {
     const res = await api.post("/api/auth/login/", credentials);
-    localStorage.setItem("accessToken", res.data.access);
-    localStorage.setItem("refreshToken", res.data.refresh);
-    localStorage.setItem("user", JSON.stringify(res.data.user));
-    
+
+    localStorage.setItem(ACCESS_TOKEN_KEY, res.data.access);
+    localStorage.setItem(REFRESH_TOKEN_KEY, res.data.refresh);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(res.data.user));
+
     // Check if guest cart needs to be merged
-    const guestToken = localStorage.getItem("guestCartToken");
+    const guestToken = localStorage.getItem(GUEST_CART_TOKEN_KEY);
     if (guestToken) {
-      await api.post("/api/orders/cart/merge/", { guest_token: guestToken });
-      localStorage.removeItem("guestCartToken");
+      try {
+        await api.post("/api/orders/cart/merge/", { guest_token: guestToken });
+        localStorage.removeItem(GUEST_CART_TOKEN_KEY);
+      } catch (mergeError) {
+        // Keep the token if merge fails so the cart can be retried later.
+        void mergeError;
+      }
     }
-    
+
     return res.data.user;
   } catch (error) {
     return rejectWithValue(error.response?.data || "Invalid email or password");
@@ -40,7 +51,7 @@ export const fetchProfile = createAsyncThunk("auth/profile", async (_, { rejectW
   }
 });
 
-const storedUser = localStorage.getItem("user");
+const storedUser = localStorage.getItem(USER_STORAGE_KEY);
 const initialState = {
   user: storedUser ? JSON.parse(storedUser) : null,
   isAuthenticated: !!storedUser,
@@ -53,9 +64,10 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     logout: (state) => {
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      localStorage.removeItem("user");
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(GUEST_CART_TOKEN_KEY);
       state.user = null;
       state.isAuthenticated = false;
       state.error = null;

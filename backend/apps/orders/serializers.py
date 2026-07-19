@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from apps.orders.models import Cart, CartItem, Wishlist, Order, OrderItem, Coupon
 from apps.products.serializers import ProductVariantSerializer
-
+from decimal import Decimal
 class CartItemSerializer(serializers.ModelSerializer):
     variant_details = ProductVariantSerializer(source="variant", read_only=True)
     item_total = serializers.SerializerMethodField()
@@ -29,14 +29,14 @@ class CartSerializer(serializers.ModelSerializer):
 
     def get_tax(self, obj):
         # 12% GST standard on sarees / apparel
-        return self.get_subtotal(obj) * 0.12
+        return self.get_subtotal(obj) * Decimal("0.12")
 
     def get_shipping(self, obj):
         # Free shipping above 2000 INR, else 150 INR
         subtotal = self.get_subtotal(obj)
         if subtotal == 0 or subtotal > 2000:
-            return 0.00
-        return 150.00
+            return Decimal("0.00")
+        return Decimal("150.00")
 
     def get_total(self, obj):
         return self.get_subtotal(obj) + self.get_tax(obj) + self.get_shipping(obj)

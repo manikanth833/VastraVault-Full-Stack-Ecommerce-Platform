@@ -1,6 +1,11 @@
 import axios from "axios";
 
 const API_URL = "http://localhost:8000";
+const GUEST_CART_TOKEN_KEY = "guestCartToken";
+const AUTH_STORAGE_KEY = "user";
+
+const isAuthenticatedSession = () => Boolean(localStorage.getItem(AUTH_STORAGE_KEY));
+const clearGuestCartToken = () => localStorage.removeItem(GUEST_CART_TOKEN_KEY);
 
 const api = axios.create({
   baseURL: API_URL,
@@ -12,17 +17,25 @@ const api = axios.create({
 // Request interceptor to attach JWT token
 api.interceptors.request.use(
   (config) => {
+    config.headers = config.headers || {};
+
     const token = localStorage.getItem("accessToken");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
-    // Attach Guest Cart token if present
-    const guestCartToken = localStorage.getItem("guestCartToken");
-    if (guestCartToken) {
-      config.headers["X-Guest-Cart-Token"] = guestCartToken;
+
+    // Only send the guest cart token for anonymous sessions.
+    if (!isAuthenticatedSession()) {
+      const guestCartToken = localStorage.getItem(GUEST_CART_TOKEN_KEY);
+      if (guestCartToken) {
+        config.headers["X-Guest-Cart-Token"] = guestCartToken;
+      }
+    } else if (typeof config.headers.delete === "function") {
+      config.headers.delete("X-Guest-Cart-Token");
+    } else {
+      delete config.headers["X-Guest-Cart-Token"];
     }
-    
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -31,10 +44,10 @@ api.interceptors.request.use(
 // Response interceptor to handle JWT token expiration and refresh automatically
 api.interceptors.response.use(
   (response) => {
-    // Capture guest cart token if sent by backend
-    const guestToken = response.headers["x-guest-cart-token"];
-    if (guestToken) {
-      localStorage.setItem("guestCartToken", guestToken);
+    // Capture the guest cart token only while the session is anonymous.
+    const guestToken = response.headers?.["x-guest-cart-token"];
+    if (guestToken && !isAuthenticatedSession()) {
+      localStorage.setItem(GUEST_CART_TOKEN_KEY, guestToken);
     }
     return response;
   },
@@ -62,6 +75,7 @@ api.interceptors.response.use(
           localStorage.removeItem("accessToken");
           localStorage.removeItem("refreshToken");
           localStorage.removeItem("user");
+          clearGuestCartToken();
           window.location.href = "/login";
         }
       }

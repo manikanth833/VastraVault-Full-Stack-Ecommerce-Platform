@@ -29,12 +29,32 @@ except ImportError:
 class CartViewSet(viewsets.ViewSet):
     permission_classes = [permissions.AllowAny]
 
+    def _get_guest_cart_token(self, request):
+        return request.headers.get("X-Guest-Cart-Token") or request.session.session_key
+
+    def _parse_positive_quantity(self, raw_quantity):
+        try:
+            quantity = int(raw_quantity)
+        except (TypeError, ValueError):
+            return None, Response(
+                {"error": "quantity must be a positive integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if quantity <= 0:
+            return None, Response(
+                {"error": "quantity must be a positive integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return quantity, None
+
     def _get_or_create_cart(self, request):
         if request.user.is_authenticated:
             cart, _ = Cart.objects.get_or_create(user=request.user)
             return cart
         else:
-            session_key = request.headers.get("X-Guest-Cart-Token") or request.session.session_key
+            session_key = self._get_guest_cart_token(request)
             if not session_key:
                 # If session does not exist, create a unique token
                 session_key = str(uuid.uuid4())
@@ -55,7 +75,9 @@ class CartViewSet(viewsets.ViewSet):
     def add_item(self, request):
         cart = self._get_or_create_cart(request)
         variant_id = request.data.get("variant_id")
-        quantity = int(request.data.get("quantity", 1))
+        quantity, error_response = self._parse_positive_quantity(request.data.get("quantity", 1))
+        if error_response:
+            return error_response
 
         variant = get_object_or_404(ProductVariant, id=variant_id)
         
@@ -89,7 +111,9 @@ class CartViewSet(viewsets.ViewSet):
     def update_item(self, request):
         cart = self._get_or_create_cart(request)
         variant_id = request.data.get("variant_id")
-        quantity = int(request.data.get("quantity"))
+        quantity, error_response = self._parse_positive_quantity(request.data.get("quantity"))
+        if error_response:
+            return error_response
 
         cart_item = get_object_or_404(CartItem, cart=cart, variant_id=variant_id)
         
