@@ -177,8 +177,8 @@ class WishlistViewSet(viewsets.ModelViewSet):
         if not created:
             return Response({"message": "Item already in wishlist"}, status=status.HTTP_200_OK)
             
-        return Response(WishlistSerializer(wishlist_item).data, status=status.HTTP_210_CREATED)
-
+        return Response(WishlistSerializer(wishlist_item).data, status=status.HTTP_201_CREATED)
+        
     def destroy(self, request, pk=None):
         wishlist_item = get_object_or_404(Wishlist, user=request.user, id=pk)
         wishlist_item.delete()

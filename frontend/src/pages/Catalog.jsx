@@ -1,15 +1,24 @@
-import React, { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { Filter, SlidersHorizontal, Search, Star, RefreshCw } from "lucide-react";
 import { fetchProducts, fetchCategories } from "../features/productSlice";
+import { addWishlistItem, fetchWishlist, removeWishlistItem } from "../features/wishlistSlice";
 import ProductCard from "../components/ProductCard";
 import { ProductCatalogSkeleton } from "../components/Skeletons";
+import api from "../services/api";
 
 export default function Catalog() {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { products, categories, loading } = useSelector((state) => state.products);
+  const { isAuthenticated } = useSelector((state) => state.auth);
+  const wishlistState = useSelector((state) => state.wishlist) || {};
+  const wishlistItems = wishlistState.items || [];
+  const pendingVariantIds = wishlistState.pendingVariantIds || [];
+  const pendingItemIds = wishlistState.pendingItemIds || [];
   
   // State for filters
   const [search, setSearch] = useState(searchParams.get("search") || "");
@@ -21,6 +30,7 @@ export default function Catalog() {
   
   // Track mobile filter visibility
   const [showFiltersMobile, setShowFiltersMobile] = useState(false);
+  const [variantIdsBySlug, setVariantIdsBySlug] = useState({});
 
   // Sync state with search parameters on mount/URL change
   useEffect(() => {
@@ -44,6 +54,111 @@ export default function Catalog() {
     dispatch(fetchProducts(filters));
     dispatch(fetchCategories());
   }, [searchParams, dispatch]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      dispatch(fetchWishlist());
+    }
+  }, [dispatch, isAuthenticated]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadVariantIds = async () => {
+      if (!isAuthenticated || products.length === 0) {
+        setVariantIdsBySlug({});
+        return;
+      }
+
+      const entries = await Promise.all(
+        products.map(async (product) => {
+          try {
+            const res = await api.get(`/api/products/${product.slug}/`);
+            return [product.slug, res.data.variants?.[0]?.id || null];
+          } catch (error) {
+            void error;
+            return [product.slug, null];
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setVariantIdsBySlug(Object.fromEntries(entries.filter(([, variantId]) => variantId)));
+      }
+    };
+
+    loadVariantIds();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [products, isAuthenticated]);
+
+  const wishlistedVariantIds = useMemo(
+    () => new Set(wishlistItems.map((item) => String(item.variant))),
+    [wishlistItems]
+  );
+
+  const getWishlistToggleState = (product) => {
+    const variantId = variantIdsBySlug[product.slug];
+    if (!variantId) {
+      return false;
+    }
+
+    const existingItem = wishlistItems.find((item) => String(item.variant) === String(variantId));
+    return (
+      pendingVariantIds.includes(String(variantId)) ||
+      (existingItem && pendingItemIds.includes(String(existingItem.id)))
+    );
+  };
+
+  const getRedirectTarget = () => `${location.pathname}${location.search}`;
+
+  const resolveVariantIdForProduct = async (product) => {
+    if (variantIdsBySlug[product.slug]) {
+      return variantIdsBySlug[product.slug];
+    }
+
+    const res = await api.get(`/api/products/${product.slug}/`);
+    const variantId = res.data.variants?.[0]?.id || null;
+    if (variantId) {
+      setVariantIdsBySlug((current) => ({
+        ...current,
+        [product.slug]: variantId,
+      }));
+    }
+    return variantId;
+  };
+
+  const handleWishlistToggle = async (product) => {
+    if (!isAuthenticated) {
+      navigate(`/login?redirect=${encodeURIComponent(getRedirectTarget())}`);
+      return;
+    }
+
+    try {
+      const variantId = await resolveVariantIdForProduct(product);
+      if (!variantId) {
+        return;
+      }
+
+      const existingItem = wishlistItems.find((item) => String(item.variant) === String(variantId));
+      if (pendingVariantIds.includes(String(variantId))) {
+        return;
+      }
+
+      if (existingItem) {
+        if (pendingItemIds.includes(String(existingItem.id))) {
+          return;
+        }
+        await dispatch(removeWishlistItem(existingItem.id)).unwrap();
+      } else {
+        await dispatch(addWishlistItem(variantId)).unwrap();
+      }
+    } catch (error) {
+      void error;
+    }
+  };
 
   const applyFilters = () => {
     const params = {};
@@ -321,6 +436,9 @@ export default function Catalog() {
                 <ProductCard 
                   key={product.id} 
                   product={product} 
+                  isWishlisted={wishlistedVariantIds.has(String(variantIdsBySlug[product.slug] || ""))}
+                  isWishlistToggling={getWishlistToggleState(product)}
+                  onWishlistToggle={handleWishlistToggle}
                 />
               ))}
             </div>

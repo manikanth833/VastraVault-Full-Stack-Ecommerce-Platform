@@ -1,18 +1,25 @@
-import React, { useEffect, useState, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
+import React, { useEffect, useState, useRef, useMemo } from "react";
+import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { Star, Heart, ShoppingCart, ShieldAlert, Award, Calendar, ChevronRight } from "lucide-react";
 import { fetchProductDetail, clearProductDetail } from "../features/productSlice";
 import { addToCart } from "../features/cartSlice";
+import { addWishlistItem, fetchWishlist, removeWishlistItem } from "../features/wishlistSlice";
 import { ProductDetailSkeleton } from "../components/Skeletons";
 import ProductCard from "../components/ProductCard";
 import api from "../services/api";
 
 export default function ProductDetails() {
   const { slug } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const dispatch = useDispatch();
   const { currentProduct, loading } = useSelector((state) => state.products);
   const { isAuthenticated } = useSelector((state) => state.auth);
+  const wishlistState = useSelector((state) => state.wishlist) || {};
+  const wishlistItems = wishlistState.items || [];
+  const pendingVariantIds = wishlistState.pendingVariantIds || [];
+  const pendingItemIds = wishlistState.pendingItemIds || [];
 
   // Detail Page States
   const [selectedVariant, setSelectedVariant] = useState(null);
@@ -20,6 +27,8 @@ export default function ProductDetails() {
   const [activeImage, setActiveImage] = useState("");
   const [cartSuccess, setCartSuccess] = useState(false);
   const [cartError, setCartError] = useState("");
+  const [wishlistSuccess, setWishlistSuccess] = useState("");
+  const [wishlistError, setWishlistError] = useState("");
 
   // Review Form States
   const [reviewRating, setReviewRating] = useState(5);
@@ -39,6 +48,12 @@ export default function ProductDetails() {
       dispatch(clearProductDetail());
     };
   }, [slug, dispatch]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      dispatch(fetchWishlist());
+    }
+  }, [dispatch, isAuthenticated]);
 
   // Sync selected variant when product loads
   useEffect(() => {
@@ -60,6 +75,8 @@ export default function ProductDetails() {
     setSelectedVariant(variant);
     setCartSuccess(false);
     setCartError("");
+    setWishlistSuccess("");
+    setWishlistError("");
     setQuantity(1);
     const primaryImg = variant.images?.find((img) => img.is_primary) || variant.images?.[0];
     setActiveImage(primaryImg?.image_url || "");
@@ -91,6 +108,50 @@ export default function ProductDetails() {
     } catch (err) {
       setCartError(err || "Failed to add item to cart");
     }
+  };
+
+  const redirectTarget = `${location.pathname}${location.search}`;
+  const currentWishlistItem = useMemo(
+    () => wishlistItems.find((item) => String(item.variant) === String(selectedVariant?.id)),
+    [selectedVariant?.id, wishlistItems]
+  );
+  const isWishlisted = Boolean(currentWishlistItem);
+  const isWishlistToggling = Boolean(
+    selectedVariant &&
+      (pendingVariantIds.includes(String(selectedVariant.id)) ||
+        (currentWishlistItem && pendingItemIds.includes(String(currentWishlistItem.id))))
+  );
+
+  const handleWishlistToggle = async () => {
+    if (!isAuthenticated) {
+      navigate(`/login?redirect=${encodeURIComponent(redirectTarget)}`);
+      return;
+    }
+
+    if (!selectedVariant || isWishlistToggling) return;
+
+    setWishlistSuccess("");
+    setWishlistError("");
+
+    try {
+      if (currentWishlistItem) {
+        await dispatch(removeWishlistItem(currentWishlistItem.id)).unwrap();
+        setWishlistSuccess("Removed from your wishlist.");
+      } else {
+        await dispatch(addWishlistItem(selectedVariant.id)).unwrap();
+        setWishlistSuccess("Saved to your wishlist.");
+      }
+    } catch (error) {
+      const message = typeof error === "string"
+        ? error
+        : error?.detail || error?.message || "Could not update wishlist.";
+      setWishlistError(message);
+    }
+
+    window.setTimeout(() => {
+      setWishlistSuccess("");
+      setWishlistError("");
+    }, 3000);
   };
 
   // Submit Review
@@ -302,6 +363,16 @@ export default function ProductDetails() {
               <ShieldAlert className="w-5 h-5 shrink-0" /> {cartError}
             </div>
           )}
+          {wishlistSuccess && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-lg text-sm font-semibold">
+              {wishlistSuccess}
+            </div>
+          )}
+          {wishlistError && (
+            <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg text-sm font-semibold flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 shrink-0" /> {wishlistError}
+            </div>
+          )}
 
           {/* CTA Buttons */}
           <div className="flex gap-4 pt-4">
@@ -311,13 +382,22 @@ export default function ProductDetails() {
               className={`w-3/4 flex items-center justify-center gap-2 py-4 rounded-full font-bold text-sm tracking-wider shadow-sm transition-all ${
                 isOutOfStock
                   ? "bg-neutral-200 text-neutral-400 cursor-not-allowed"
-                  : "bg-royal-red-900 hover:bg-royal-red-800 text-white"
+                : "bg-royal-red-900 hover:bg-royal-red-800 text-white"
               }`}
             >
               <ShoppingCart className="w-5 h-5" /> Add to Bag
             </button>
-            <button className="w-1/4 flex items-center justify-center border border-neutral-200 hover:border-neutral-300 bg-white p-4 rounded-full transition-all text-charcoal-500 hover:text-royal-red-900">
-              <Heart className="w-6 h-6 stroke-[1.5]" />
+            <button
+              type="button"
+              onClick={handleWishlistToggle}
+              disabled={isWishlistToggling}
+              className={`w-1/4 flex items-center justify-center border bg-white p-4 rounded-full transition-all ${
+                isWishlisted
+                  ? "border-royal-red-900 text-royal-red-900 shadow-sm"
+                  : "border-neutral-200 hover:border-neutral-300 text-charcoal-500 hover:text-royal-red-900"
+              } ${isWishlistToggling ? "opacity-60 cursor-not-allowed" : ""}`}
+            >
+              <Heart className={`w-6 h-6 stroke-[1.5] ${isWishlisted ? "fill-royal-red-900 text-royal-red-900" : ""}`} />
             </button>
           </div>
         </div>

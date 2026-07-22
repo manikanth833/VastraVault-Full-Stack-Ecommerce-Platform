@@ -1,7 +1,9 @@
 from rest_framework import serializers
+from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password as django_validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from apps.authentication.models import Role, Permission
 from apps.orders.models import Address
@@ -119,6 +121,9 @@ class VerifyEmailOtpSerializer(serializers.Serializer):
         },
     )
 
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
@@ -131,9 +136,39 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
-        data = super().validate(attrs)
-        # Add extra response fields
-        data["user"] = UserSerializer(self.user).data
+        email = (attrs.get(self.username_field) or "").strip().lower()
+        password = attrs.get("password")
+        user = User.objects.filter(email__iexact=email).first()
+
+        if user and user.is_login_locked():
+            locked_until = timezone.localtime(user.locked_until).strftime("%Y-%m-%d %H:%M")
+            raise serializers.ValidationError(
+                {"detail": f"Your account is locked due to repeated failed logins. Try again after {locked_until}."}
+            )
+
+        if user and user.locked_until and user.locked_until <= timezone.now():
+            user.clear_login_lock()
+
+        authenticated_user = authenticate(
+            request=self.context.get("request"),
+            **{self.username_field: email, "password": password},
+        )
+
+        if authenticated_user is None:
+            if user:
+                user.record_login_failure()
+
+            raise serializers.ValidationError({"detail": "Invalid email or password"})
+
+        authenticated_user.clear_login_lock()
+        self.user = authenticated_user
+
+        refresh = self.get_token(authenticated_user)
+        data = {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "user": UserSerializer(authenticated_user).data,
+        }
         return data
 
 class AddressSerializer(serializers.ModelSerializer):

@@ -1,6 +1,11 @@
 import uuid
+from datetime import timedelta
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.utils import timezone
+
+LOGIN_LOCKOUT_THRESHOLD = 5
+LOGIN_LOCKOUT_DURATION = timedelta(minutes=15)
 
 class Permission(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -79,6 +84,8 @@ class User(AbstractUser):
     email_verification_generation = models.PositiveIntegerField(default=0)
     shop_name = models.CharField(max_length=255, blank=True, null=True)
     shop_description = models.TextField(blank=True, null=True)
+    failed_login_attempts = models.PositiveSmallIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -100,3 +107,23 @@ class User(AbstractUser):
         if not self.role:
             return False
         return self.role.permissions.filter(name=permission_name).exists()
+
+    def is_login_locked(self):
+        return bool(self.locked_until and self.locked_until > timezone.now())
+
+    def clear_login_lock(self):
+        self.failed_login_attempts = 0
+        self.locked_until = None
+        self.save(update_fields=["failed_login_attempts", "locked_until", "updated_at"])
+
+    def record_login_failure(self):
+        now = timezone.now()
+        if self.locked_until and self.locked_until > now:
+            return
+
+        self.failed_login_attempts += 1
+        if self.failed_login_attempts >= LOGIN_LOCKOUT_THRESHOLD:
+            self.failed_login_attempts = LOGIN_LOCKOUT_THRESHOLD
+            self.locked_until = now + LOGIN_LOCKOUT_DURATION
+
+        self.save(update_fields=["failed_login_attempts", "locked_until", "updated_at"])

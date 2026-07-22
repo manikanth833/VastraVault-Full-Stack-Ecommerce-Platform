@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Users, ShoppingBag, IndianRupee, ShieldCheck, Check, X, RefreshCw, LogOut, Store, Eye, Trash2, Search } from "lucide-react";
 import api from "../services/api";
-import { logout } from "../features/authSlice";
+import { logoutUser } from "../features/authSlice";
 import { clearCartLocal } from "../features/cartSlice";
 
 const formatCurrency = (value) => {
@@ -205,7 +205,7 @@ export default function AdminDashboard() {
   const isInitialLoading = loading && !stats;
 
   const handleLogout = () => {
-    dispatch(logout());
+    dispatch(logoutUser());
     dispatch(clearCartLocal());
     navigate("/");
   };

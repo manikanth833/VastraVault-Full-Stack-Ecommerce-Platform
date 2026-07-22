@@ -4,7 +4,7 @@ import { Heart, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import PremiumImage from "./PremiumImage";
 
-export default function ProductCard({ product, onWishlistToggle, isWishlisted }) {
+export default function ProductCard({ product, onWishlistToggle, isWishlisted, isWishlistToggling }) {
   const imageUrl = product.primary_image?.trim?.() || "";
 
   return (
@@ -29,8 +29,13 @@ export default function ProductCard({ product, onWishlistToggle, isWishlisted })
 
         {/* Wishlist Button */}
         <button
+          type="button"
           onClick={() => onWishlistToggle?.(product)}
-          className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-charcoal-700 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-royal-red-900 focus:outline-none"
+          disabled={isWishlistToggling}
+          aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+          className={`absolute right-4 top-4 z-20 rounded-full bg-white/90 p-2 text-charcoal-700 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-royal-red-900 focus:outline-none ${
+            isWishlistToggling ? "cursor-not-allowed opacity-60" : ""
+          }`}
         >
           <Heart
             className={`h-5 w-5 ${

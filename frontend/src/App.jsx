@@ -7,6 +7,7 @@ import Home from "./pages/Home";
 import Catalog from "./pages/Catalog";
 import ProductDetails from "./pages/ProductDetails";
 import Cart from "./pages/Cart";
+import Wishlist from "./pages/Wishlist";
 import Checkout from "./pages/Checkout";
 import OrderSuccess from "./pages/OrderSuccess";
 import Profile from "./pages/Profile";
@@ -73,13 +74,13 @@ export default function App() {
           <Route path="/catalog" element={<Catalog />} />
           <Route path="/products/:slug" element={<ProductDetails />} />
           <Route path="/cart" element={<Cart />} />
+          <Route path="/wishlist" element={<Wishlist />} />
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:uid/:token" element={<ResetPassword />} />
           <Route path="/verify-email-pending" element={<EmailVerificationPending />} />
           <Route path="/verify-email/:uid/:token" element={<EmailVerified />} />
           <Route path="/register" element={<Register />} />
-
           <Route
             path="/checkout"
             element={

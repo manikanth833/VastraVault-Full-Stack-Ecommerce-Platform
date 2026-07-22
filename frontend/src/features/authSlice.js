@@ -1,10 +1,18 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../services/api";
+import { clearWishlist } from "./wishlistSlice";
 
 const GUEST_CART_TOKEN_KEY = "guestCartToken";
 const USER_STORAGE_KEY = "user";
 const ACCESS_TOKEN_KEY = "accessToken";
 const REFRESH_TOKEN_KEY = "refreshToken";
+
+const clearAuthStorage = () => {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(USER_STORAGE_KEY);
+  localStorage.removeItem(GUEST_CART_TOKEN_KEY);
+};
 
 export const login = createAsyncThunk("auth/login", async (credentials, { rejectWithValue }) => {
   try {
@@ -51,6 +59,24 @@ export const fetchProfile = createAsyncThunk("auth/profile", async (_, { rejectW
   }
 });
 
+export const logoutUser = createAsyncThunk("auth/logoutUser", async (_, { dispatch }) => {
+  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+
+  if (refreshToken) {
+    try {
+      await api.post("/api/auth/logout/", { refresh: refreshToken });
+    } catch (error) {
+      // Always clear client state even if the network call fails.
+      void error;
+    }
+  }
+
+  dispatch(clearWishlist());
+  clearAuthStorage();
+
+  return true;
+});
+
 const storedUser = localStorage.getItem(USER_STORAGE_KEY);
 const initialState = {
   user: storedUser ? JSON.parse(storedUser) : null,
@@ -64,10 +90,7 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     logout: (state) => {
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
-      localStorage.removeItem(REFRESH_TOKEN_KEY);
-      localStorage.removeItem(USER_STORAGE_KEY);
-      localStorage.removeItem(GUEST_CART_TOKEN_KEY);
+      clearAuthStorage();
       state.user = null;
       state.isAuthenticated = false;
       state.error = null;

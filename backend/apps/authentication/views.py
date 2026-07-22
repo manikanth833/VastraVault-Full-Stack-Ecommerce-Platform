@@ -10,10 +10,13 @@ from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.utils import timezone
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 from apps.authentication.serializers import (
     RegisterSerializer,
     UserSerializer,
     CustomTokenObtainPairSerializer,
+    LogoutSerializer,
     AddressSerializer,
     ForgotPasswordSerializer,
     ResetPasswordSerializer,
@@ -47,6 +50,24 @@ class RegisterView(generics.CreateAPIView):
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
     throttle_classes = [LoginRateThrottle]
+
+
+class LogoutView(generics.GenericAPIView):
+    serializer_class = LogoutSerializer
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        refresh_token = serializer.validated_data["refresh"]
+        try:
+            RefreshToken(refresh_token).blacklist()
+        except TokenError:
+            pass
+
+        return Response({"detail": "Logged out successfully."}, status=status.HTTP_200_OK)
 
 
 class ForgotPasswordView(generics.GenericAPIView):

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { ShoppingBag, Heart, User, LogOut, Menu, X, BarChart3, ShieldCheck } from "lucide-react";
-import { logout } from "../features/authSlice";
+import { logoutUser } from "../features/authSlice";
 import { clearCartLocal } from "../features/cartSlice";
 
 export default function Navbar() {
@@ -20,7 +20,7 @@ export default function Navbar() {
   const isSellerDashboardPage = location.pathname.startsWith("/seller-dashboard");
 
   const handleLogout = () => {
-    dispatch(logout());
+    dispatch(logoutUser());
     dispatch(clearCartLocal());
     navigate("/");
   };
