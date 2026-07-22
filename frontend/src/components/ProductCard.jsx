@@ -4,6 +4,8 @@ import { Heart, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import PremiumImage from "./PremiumImage";
 
+const MotionHeart = motion(Heart);
+
 export default function ProductCard({ product, onWishlistToggle, isWishlisted, isWishlistToggling }) {
   const imageUrl = product.primary_image?.trim?.() || "";
 
@@ -28,23 +30,30 @@ export default function ProductCard({ product, onWishlistToggle, isWishlisted, i
         </Link>
 
         {/* Wishlist Button */}
-        <button
+        <motion.button
           type="button"
           onClick={() => onWishlistToggle?.(product)}
           disabled={isWishlistToggling}
           aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-          className={`absolute right-4 top-4 z-20 rounded-full bg-white/90 p-2 text-charcoal-700 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-royal-red-900 focus:outline-none ${
-            isWishlistToggling ? "cursor-not-allowed opacity-60" : ""
+          whileTap={isWishlistToggling ? undefined : { scale: 0.92 }}
+          animate={{ scale: isWishlistToggling ? 0.97 : 1 }}
+          transition={{ type: "spring", stiffness: 420, damping: 22 }}
+          className={`absolute right-4 top-4 z-20 rounded-full bg-white/90 p-2 text-charcoal-700 shadow-sm backdrop-blur-sm transition-[background-color,color,box-shadow,transform,opacity] duration-300 hover:bg-white hover:text-royal-red-900 focus:outline-none ${
+            isWishlistToggling ? "cursor-progress shadow-md opacity-80" : ""
           }`}
         >
-          <Heart
-            className={`h-5 w-5 ${
+          <MotionHeart
+            animate={{
+              scale: isWishlisted ? 1.06 : 1,
+            }}
+            transition={{ type: "spring", stiffness: 500, damping: 20 }}
+            className={`h-5 w-5 transition-[fill,color,stroke,transform] duration-300 ${
               isWishlisted
                 ? "fill-royal-red-900 text-royal-red-900"
                 : "text-charcoal-700"
             }`}
           />
-        </button>
+        </motion.button>
 
         {/* Out of Stock Overlay */}
         {!product.in_stock && (

@@ -1,13 +1,60 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import { Star, Heart, ShoppingCart, ShieldAlert, Award, Calendar, ChevronRight } from "lucide-react";
+import { Star, Heart, ShoppingCart, ShieldAlert, Award, Calendar, ChevronRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { fetchProductDetail, clearProductDetail } from "../features/productSlice";
 import { addToCart } from "../features/cartSlice";
 import { addWishlistItem, fetchWishlist, removeWishlistItem } from "../features/wishlistSlice";
 import { ProductDetailSkeleton } from "../components/Skeletons";
 import ProductCard from "../components/ProductCard";
 import api from "../services/api";
+
+function WishlistToast({ toast, onDismiss }) {
+  return (
+    <AnimatePresence>
+      {toast && (
+        <motion.div
+          key={toast.id}
+          initial={{ opacity: 0, y: -12, x: 12, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, x: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -10, x: 12, scale: 0.96 }}
+          transition={{ type: "spring", stiffness: 360, damping: 26 }}
+          className={`fixed right-4 top-4 z-50 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border px-4 py-3 shadow-xl backdrop-blur-sm ${
+            toast.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-rose-200 bg-rose-50 text-rose-800"
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-start gap-3">
+            <div
+              className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                toast.type === "success" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+              }`}
+            >
+              {toast.type === "success" ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold leading-5">{toast.message}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="ml-2 rounded-full p-1 text-current/60 transition-colors hover:text-current"
+              aria-label="Dismiss notification"
+            >
+              <span className="text-base leading-none">×</span>
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+const MotionHeart = motion(Heart);
 
 export default function ProductDetails() {
   const { slug } = useParams();
@@ -27,8 +74,7 @@ export default function ProductDetails() {
   const [activeImage, setActiveImage] = useState("");
   const [cartSuccess, setCartSuccess] = useState(false);
   const [cartError, setCartError] = useState("");
-  const [wishlistSuccess, setWishlistSuccess] = useState("");
-  const [wishlistError, setWishlistError] = useState("");
+  const [wishlistToast, setWishlistToast] = useState(null);
 
   // Review Form States
   const [reviewRating, setReviewRating] = useState(5);
@@ -55,6 +101,16 @@ export default function ProductDetails() {
     }
   }, [dispatch, isAuthenticated]);
 
+  useEffect(() => {
+    if (!wishlistToast) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setWishlistToast(null);
+    }, 2600);
+
+    return () => window.clearTimeout(timer);
+  }, [wishlistToast]);
+
   // Sync selected variant when product loads
   useEffect(() => {
     if (currentProduct) {
@@ -75,8 +131,7 @@ export default function ProductDetails() {
     setSelectedVariant(variant);
     setCartSuccess(false);
     setCartError("");
-    setWishlistSuccess("");
-    setWishlistError("");
+    setWishlistToast(null);
     setQuantity(1);
     const primaryImg = variant.images?.find((img) => img.is_primary) || variant.images?.[0];
     setActiveImage(primaryImg?.image_url || "");
@@ -110,6 +165,14 @@ export default function ProductDetails() {
     }
   };
 
+  const triggerWishlistToast = (type, message) => {
+    setWishlistToast({
+      id: `${type}-${Date.now()}`,
+      type,
+      message,
+    });
+  };
+
   const redirectTarget = `${location.pathname}${location.search}`;
   const currentWishlistItem = useMemo(
     () => wishlistItems.find((item) => String(item.variant) === String(selectedVariant?.id)),
@@ -130,28 +193,22 @@ export default function ProductDetails() {
 
     if (!selectedVariant || isWishlistToggling) return;
 
-    setWishlistSuccess("");
-    setWishlistError("");
+    setWishlistToast(null);
 
     try {
       if (currentWishlistItem) {
         await dispatch(removeWishlistItem(currentWishlistItem.id)).unwrap();
-        setWishlistSuccess("Removed from your wishlist.");
+        triggerWishlistToast("success", "Removed from your wishlist.");
       } else {
         await dispatch(addWishlistItem(selectedVariant.id)).unwrap();
-        setWishlistSuccess("Saved to your wishlist.");
+        triggerWishlistToast("success", "Saved to your wishlist.");
       }
     } catch (error) {
       const message = typeof error === "string"
         ? error
         : error?.detail || error?.message || "Could not update wishlist.";
-      setWishlistError(message);
+      triggerWishlistToast("error", message);
     }
-
-    window.setTimeout(() => {
-      setWishlistSuccess("");
-      setWishlistError("");
-    }, 3000);
   };
 
   // Submit Review
@@ -191,6 +248,10 @@ export default function ProductDetails() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-16">
+      <WishlistToast
+        toast={wishlistToast}
+        onDismiss={() => setWishlistToast(null)}
+      />
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 text-xs font-semibold text-charcoal-400 uppercase tracking-widest">
         <Link to="/" className="hover:text-royal-red-900">Home</Link>
@@ -363,17 +424,6 @@ export default function ProductDetails() {
               <ShieldAlert className="w-5 h-5 shrink-0" /> {cartError}
             </div>
           )}
-          {wishlistSuccess && (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-lg text-sm font-semibold">
-              {wishlistSuccess}
-            </div>
-          )}
-          {wishlistError && (
-            <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg text-sm font-semibold flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 shrink-0" /> {wishlistError}
-            </div>
-          )}
-
           {/* CTA Buttons */}
           <div className="flex gap-4 pt-4">
             <button
@@ -387,18 +437,27 @@ export default function ProductDetails() {
             >
               <ShoppingCart className="w-5 h-5" /> Add to Bag
             </button>
-            <button
+            <motion.button
               type="button"
               onClick={handleWishlistToggle}
               disabled={isWishlistToggling}
+              whileTap={isWishlistToggling ? undefined : { scale: 0.92 }}
+              animate={{ scale: isWishlistToggling ? 0.97 : 1 }}
+              transition={{ type: "spring", stiffness: 420, damping: 22 }}
               className={`w-1/4 flex items-center justify-center border bg-white p-4 rounded-full transition-all ${
                 isWishlisted
                   ? "border-royal-red-900 text-royal-red-900 shadow-sm"
                   : "border-neutral-200 hover:border-neutral-300 text-charcoal-500 hover:text-royal-red-900"
-              } ${isWishlistToggling ? "opacity-60 cursor-not-allowed" : ""}`}
+              } ${isWishlistToggling ? "cursor-progress shadow-md opacity-80" : ""}`}
             >
-              <Heart className={`w-6 h-6 stroke-[1.5] ${isWishlisted ? "fill-royal-red-900 text-royal-red-900" : ""}`} />
-            </button>
+              <MotionHeart
+                animate={{ scale: isWishlisted ? 1.06 : 1 }}
+                transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                className={`w-6 h-6 stroke-[1.5] transition-[fill,color,stroke,transform] duration-300 ${
+                  isWishlisted ? "fill-royal-red-900 text-royal-red-900" : ""
+                }`}
+              />
+            </motion.button>
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { Heart, ShoppingBag, Trash2, ShieldAlert } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { fetchWishlist, removeWishlistItem } from "../features/wishlistSlice";
 import { addToCart } from "../features/cartSlice";
 
@@ -87,7 +88,8 @@ export default function Wishlist() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+        <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          <AnimatePresence mode="popLayout">
           {items.map((item) => {
             const isRemoving = pendingItemIds.includes(String(item.id));
             const isMoving = movingToCartId === item.id;
@@ -95,8 +97,13 @@ export default function Wishlist() {
             const outOfStock = (item.variant_details?.stock_qty ?? 0) <= 0;
 
             return (
-              <div
+              <motion.div
                 key={item.id}
+                layout
+                initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 14, scale: 0.98 }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
                 className="bg-white border border-neutral-100 rounded-xl shadow-sm overflow-hidden flex flex-col"
               >
                 <div className="relative aspect-[3/4] bg-neutral-50">
@@ -158,10 +165,11 @@ export default function Wishlist() {
                     </button>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
-        </div>
+          </AnimatePresence>
+        </motion.div>
       )}
     </div>
   );
