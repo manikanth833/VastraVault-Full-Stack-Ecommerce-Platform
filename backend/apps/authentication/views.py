@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.utils import timezone
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from apps.authentication.serializers import (
@@ -31,6 +31,7 @@ from apps.authentication.utils import (
     send_verification_email,
     OTP_MAX_ATTEMPTS,
 )
+from apps.authentication.audit import log_event
 from apps.authentication.throttling import ForgotPasswordRateThrottle, LoginRateThrottle
 from apps.orders.models import Address
 
@@ -52,6 +53,25 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [LoginRateThrottle]
 
 
+class CustomTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        user = None
+        refresh_token = request.data.get("refresh")
+        if refresh_token:
+            try:
+                token = RefreshToken(refresh_token)
+                user_id = token.get("user_id")
+                if user_id:
+                    user = User.objects.filter(pk=user_id).first()
+            except TokenError:
+                pass
+
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            log_event(request, "TOKEN_REFRESH", user=user, email=user.email if user else "")
+        return response
+
+
 class LogoutView(generics.GenericAPIView):
     serializer_class = LogoutSerializer
     permission_classes = [AllowAny]
@@ -62,10 +82,16 @@ class LogoutView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
 
         refresh_token = serializer.validated_data["refresh"]
+        blacklisted = False
         try:
             RefreshToken(refresh_token).blacklist()
+            blacklisted = True
         except TokenError:
             pass
+        finally:
+            if blacklisted:
+                log_event(request, "TOKEN_BLACKLISTED")
+            log_event(request, "LOGOUT")
 
         return Response({"detail": "Logged out successfully."}, status=status.HTTP_200_OK)
 
@@ -84,6 +110,7 @@ class ForgotPasswordView(generics.GenericAPIView):
         user = User.objects.filter(email__iexact=email).first()
         if user:
             send_password_reset_email(user)
+            log_event(request, "PASSWORD_RESET_REQUESTED", user=user)
 
         return Response(
             {
@@ -128,6 +155,7 @@ class ResetPasswordView(generics.GenericAPIView):
 
         user.set_password(password)
         user.save(update_fields=["password", "updated_at"])
+        log_event(request, "PASSWORD_RESET_COMPLETED", user=user)
 
         return Response(
             {"detail": "Password reset successfully. You can now sign in with your new password."},
@@ -194,6 +222,13 @@ class VerifyEmailOtpView(generics.GenericAPIView):
             return generic_error
 
         if user.email_otp_attempts >= OTP_MAX_ATTEMPTS:
+            log_event(
+                request,
+                "EMAIL_OTP_LOCKED",
+                user=user,
+                email=email,
+                failed_attempts=user.email_otp_attempts,
+            )
             return Response(
                 {"otp": ["Too many incorrect attempts. Please request a new code."]},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -202,6 +237,13 @@ class VerifyEmailOtpView(generics.GenericAPIView):
         if not check_password(otp, user.email_otp_hash):
             user.email_otp_attempts += 1
             user.save(update_fields=["email_otp_attempts", "updated_at"])
+            log_event(
+                request,
+                "EMAIL_OTP_FAILED",
+                user=user,
+                email=email,
+                failed_attempts=user.email_otp_attempts,
+            )
             return generic_error
 
         user.is_email_verified = True
@@ -217,6 +259,7 @@ class VerifyEmailOtpView(generics.GenericAPIView):
                 "updated_at",
             ]
         )
+        log_event(request, "EMAIL_VERIFIED", user=user)
         return Response({"detail": "Email verified successfully."}, status=status.HTTP_200_OK)
 
 
@@ -255,6 +298,7 @@ class VerifyEmailView(generics.GenericAPIView):
 
         user.is_email_verified = True
         user.save(update_fields=["is_email_verified", "updated_at"])
+        log_event(request, "EMAIL_VERIFIED", user=user)
 
         return Response(
             {"detail": "Email verified successfully."},

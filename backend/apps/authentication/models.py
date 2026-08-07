@@ -127,3 +127,44 @@ class User(AbstractUser):
             self.locked_until = now + LOGIN_LOCKOUT_DURATION
 
         self.save(update_fields=["failed_login_attempts", "locked_until", "updated_at"])
+
+
+class AuditLog(models.Model):
+    class EventType(models.TextChoices):
+        LOGIN_SUCCESS = "LOGIN_SUCCESS", "Login Success"
+        LOGIN_FAILURE = "LOGIN_FAILURE", "Login Failure"
+        LOGIN_LOCKOUT = "LOGIN_LOCKOUT", "Login Lockout"
+        LOGOUT = "LOGOUT", "Logout"
+        PASSWORD_RESET_REQUESTED = "PASSWORD_RESET_REQUESTED", "Password Reset Requested"
+        PASSWORD_RESET_COMPLETED = "PASSWORD_RESET_COMPLETED", "Password Reset Completed"
+        EMAIL_VERIFICATION_REQUESTED = "EMAIL_VERIFICATION_REQUESTED", "Email Verification Requested"
+        EMAIL_VERIFIED = "EMAIL_VERIFIED", "Email Verified"
+        EMAIL_OTP_FAILED = "EMAIL_OTP_FAILED", "Email OTP Failed"
+        EMAIL_OTP_LOCKED = "EMAIL_OTP_LOCKED", "Email OTP Locked"
+        TOKEN_REFRESH = "TOKEN_REFRESH", "Token Refresh"
+        TOKEN_BLACKLISTED = "TOKEN_BLACKLISTED", "Token Blacklisted"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event_type = models.CharField(max_length=64, choices=EventType.choices, db_index=True)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
+    email = models.CharField(max_length=254)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["event_type", "created_at"]),
+            models.Index(fields=["user", "created_at"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.event_type} {self.email}"

@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from apps.authentication.models import Role, Permission
+from apps.authentication.audit import log_event
 from apps.orders.models import Address
 
 User = get_user_model()
@@ -136,11 +137,19 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
+        request = self.context.get("request")
         email = (attrs.get(self.username_field) or "").strip().lower()
         password = attrs.get("password")
         user = User.objects.filter(email__iexact=email).first()
 
         if user and user.is_login_locked():
+            log_event(
+                request,
+                "LOGIN_LOCKOUT",
+                user=user,
+                email=email,
+                failed_attempts=user.failed_login_attempts,
+            )
             locked_until = timezone.localtime(user.locked_until).strftime("%Y-%m-%d %H:%M")
             raise serializers.ValidationError(
                 {"detail": f"Your account is locked due to repeated failed logins. Try again after {locked_until}."}
@@ -157,10 +166,20 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if authenticated_user is None:
             if user:
                 user.record_login_failure()
+                log_event(
+                    request,
+                    "LOGIN_FAILURE",
+                    user=user,
+                    email=email,
+                    failed_attempts=user.failed_login_attempts,
+                )
+            else:
+                log_event(request, "LOGIN_FAILURE", email=email, failed_attempts=0)
 
             raise serializers.ValidationError({"detail": "Invalid email or password"})
 
         authenticated_user.clear_login_lock()
+        log_event(request, "LOGIN_SUCCESS", user=authenticated_user)
         self.user = authenticated_user
 
         refresh = self.get_token(authenticated_user)

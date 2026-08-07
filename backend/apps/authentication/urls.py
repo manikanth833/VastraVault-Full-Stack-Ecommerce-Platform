@@ -1,9 +1,9 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView
 from apps.authentication.views import (
     RegisterView,
     CustomTokenObtainPairView,
+    CustomTokenRefreshView,
     LogoutView,
     ForgotPasswordView,
     ResetPasswordView,
@@ -30,7 +30,7 @@ urlpatterns = [
     path("resend-verification/", ResendVerificationView.as_view(), name="resend-verification"),
     path("verify-email-otp/", VerifyEmailOtpView.as_view(), name="verify-email-otp"),
     path("verify-email/", VerifyEmailView.as_view(), name="verify-email"),
-    path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     path("profile/", UserProfileView.as_view(), name="profile"),
     path("dashboard/seller/", SellerDashboardView.as_view(), name="seller-dashboard"),
     path("dashboard/admin/", AdminDashboardView.as_view(), name="admin-dashboard"),
