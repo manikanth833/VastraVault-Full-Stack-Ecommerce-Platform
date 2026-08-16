@@ -1,7 +1,7 @@
 import uuid
+from decimal import Decimal
 from django.shortcuts import get_object_or_404
 from django.db import transaction
-from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -15,6 +15,7 @@ from apps.orders.serializers import (
 )
 from apps.authentication.permissions import IsAdminUser, IsSellerUser
 from django.conf import settings
+from apps.orders.utils import calculate_pricing, CouponPricingError
 
 # Safe Razorpay initialization with mock fallback for dev
 try:
@@ -70,6 +71,28 @@ class CartViewSet(viewsets.ViewSet):
         if not request.user.is_authenticated:
             response["X-Guest-Cart-Token"] = cart.session_key
         return response
+
+    @action(detail=False, methods=["GET"])
+    def preview(self, request):
+        cart = self._get_or_create_cart(request)
+        coupon_code = request.query_params.get("coupon_code", "")
+        subtotal = sum((item.quantity * item.variant.final_price for item in cart.items.all()), Decimal("0.00"))
+
+        try:
+            pricing = calculate_pricing(subtotal, coupon_code, strict_coupon=True)
+        except CouponPricingError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                "subtotal": pricing["subtotal"],
+                "tax": pricing["tax_amount"],
+                "shipping": pricing["shipping_charge"],
+                "discount_amount": pricing["discount_amount"],
+                "total": pricing["total_amount"],
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=["POST"])
     def add_item(self, request):
@@ -192,24 +215,16 @@ class CouponViewSet(viewsets.ViewSet):
         code = request.data.get("code", "").upper()
         amount = float(request.data.get("amount", 0))
 
-        coupon = Coupon.objects.filter(code=code, active=True).first()
-        if not coupon or not coupon.is_valid(amount):
-            return Response({"valid": False, "error": "Invalid or expired coupon code."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            pricing = calculate_pricing(amount, code, strict_coupon=True)
+        except CouponPricingError as exc:
+            return Response({"valid": False, "error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        discount = 0.00
-        if coupon.discount_type == "PERCENTAGE":
-            discount = amount * (float(coupon.value) / 100.0)
-            if coupon.max_discount:
-                discount = min(discount, float(coupon.max_discount))
-        else:
-            discount = float(coupon.value)
-
-        discount = min(discount, amount)
         return Response({
             "valid": True,
-            "code": coupon.code,
-            "discount_amount": discount,
-            "coupon_id": coupon.id
+            "code": pricing["coupon"].code,
+            "discount_amount": pricing["discount_amount"],
+            "coupon_id": pricing["coupon"].id
         })
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -261,28 +276,17 @@ class OrderViewSet(viewsets.ModelViewSet):
         }
 
         # 3. Calculate values
-        subtotal = sum(item.quantity * item.variant.final_price for item in cart.items.all())
-        
-        discount_amount = 0.00
-        coupon_obj = None
-        if coupon_code:
-            coupon = Coupon.objects.filter(code=coupon_code.upper(), active=True).first()
-            if coupon and coupon.is_valid(float(subtotal)):
-                coupon_obj = coupon
-                if coupon.discount_type == "PERCENTAGE":
-                    discount_amount = float(subtotal) * (float(coupon.value) / 100.0)
-                    if coupon.max_discount:
-                        discount_amount = min(discount_amount, float(coupon.max_discount))
-                else:
-                    discount_amount = float(coupon.value)
-                discount_amount = min(discount_amount, float(subtotal))
-                # Update usage
-                coupon.usage_count += 1
-                coupon.save()
+        subtotal = sum((item.quantity * item.variant.final_price for item in cart.items.all()), Decimal("0.00"))
+        pricing = calculate_pricing(subtotal, coupon_code, strict_coupon=False)
+        discount_amount = pricing["discount_amount"]
+        tax_amount = pricing["tax_amount"]
+        shipping_charge = pricing["shipping_charge"]
+        total_amount = pricing["total_amount"]
+        coupon_obj = pricing["coupon"]
 
-        tax_amount = float(subtotal - discount_amount) * 0.12 # 12% GST
-        shipping_charge = 0.00 if (subtotal - discount_amount) > 2000 else 150.00
-        total_amount = float(subtotal) - discount_amount + tax_amount + shipping_charge
+        if coupon_obj:
+            coupon_obj.usage_count += 1
+            coupon_obj.save(update_fields=["usage_count"])
 
         # 4. Integrate Razorpay Order creation
         razorpay_order_id = f"order_mock_{uuid.uuid4().hex[:12]}"
@@ -333,10 +337,6 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         # 7. Clear cart
         cart.items.all().delete()
-
-        # Send background email notification
-        from apps.orders.tasks import send_order_confirmation_email
-        send_order_confirmation_email.delay(str(order.id))
 
         return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
 

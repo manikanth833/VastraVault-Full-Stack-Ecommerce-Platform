@@ -34,18 +34,54 @@ export default function Checkout() {
   const [checkoutError, setCheckoutError] = useState("");
   const [showMockModal, setShowMockModal] = useState(false);
   const [mockOrderData, setMockOrderData] = useState(null);
+  const [couponPreview, setCouponPreview] = useState(null);
+  const [couponPreviewError, setCouponPreviewError] = useState("");
 
   useEffect(() => {
     dispatch(fetchCart());
     loadAddresses();
   }, [dispatch]);
 
-  const loadAddresses = async () => {
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCouponPreview = async () => {
+      if (!couponCode || !(cart?.items?.length > 0)) {
+        setCouponPreview(null);
+        setCouponPreviewError("");
+        return;
+      }
+
+      try {
+        const res = await api.get("/api/orders/cart/preview/", {
+          params: { coupon_code: couponCode },
+        });
+        if (isMounted) {
+          setCouponPreview(res.data);
+          setCouponPreviewError("");
+        }
+      } catch (err) {
+        if (isMounted) {
+          setCouponPreview(null);
+          setCouponPreviewError(err.response?.data?.error || "Invalid or expired coupon.");
+        }
+      }
+    };
+
+    loadCouponPreview();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [couponCode, cart?.items?.length, cart?.subtotal]);
+
+ const loadAddresses = async () => {
     try {
       const res = await api.get("/api/auth/addresses/");
-      setAddresses(res.data);
-      if (res.data.length > 0) {
-        const def = res.data.find((a) => a.is_default) || res.data[0];
+      const addressList = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+      setAddresses(addressList);
+      if (addressList.length > 0) {
+        const def = addressList.find((a) => a.is_default) || addressList[0];
         setSelectedAddress(def);
       }
     } catch (err) {
@@ -109,7 +145,7 @@ export default function Checkout() {
       } else {
         // Standard live Razorpay Checkout Flow
         const options = {
-          key: "rzp_test_mockkeyid123", // Razorpay Key ID
+          key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Razorpay Key ID
           amount: Math.round(parseFloat(orderData.total_amount) * 100),
           currency: "INR",
           name: "Ananya Sarees",
@@ -174,11 +210,11 @@ export default function Checkout() {
   };
 
   // Dynamically calculate totals
-  const subtotal = parseFloat(cart?.subtotal || 0);
-  const tax = parseFloat(cart?.tax || 0);
-  const shipping = parseFloat(cart?.shipping || 0);
-  const discountAmount = couponCode ? (subtotal * 0.10) : 0.00; // WELCOME10 mock flat adjustment
-  const total = subtotal - discountAmount + tax + shipping;
+  const subtotal = parseFloat(couponPreview?.subtotal ?? cart?.subtotal ?? 0);
+  const tax = parseFloat(couponPreview?.tax ?? cart?.tax ?? 0);
+  const shipping = parseFloat(couponPreview?.shipping ?? cart?.shipping ?? 0);
+  const discountAmount = parseFloat(couponPreview?.discount_amount ?? 0);
+  const total = parseFloat(couponPreview?.total ?? cart?.total ?? (subtotal - discountAmount + tax + shipping));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
@@ -314,6 +350,12 @@ export default function Checkout() {
             {checkoutError && (
               <div className="text-xs font-semibold text-red-700 bg-red-50 p-3 rounded border border-red-200">
                 {checkoutError}
+              </div>
+            )}
+
+            {couponPreviewError && (
+              <div className="text-xs font-semibold text-red-700 bg-red-50 p-3 rounded border border-red-200">
+                {couponPreviewError}
               </div>
             )}
 

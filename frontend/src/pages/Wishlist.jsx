@@ -6,13 +6,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { fetchWishlist, removeWishlistItem } from "../features/wishlistSlice";
 import { addToCart } from "../features/cartSlice";
 
-function getDisplayName(sku) {
-  if (!sku) return "Ananya Heritage Saree";
-  if (sku.includes("KAN")) return "Traditional Kanjeevaram Silk Saree";
-  if (sku.includes("BAN")) return "Royal Crimson Banarasi Katan Silk Saree";
-  return "Pastel Linen Zari Border Saree";
-}
-
 export default function Wishlist() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -134,7 +127,7 @@ export default function Wishlist() {
 
                 <div className="p-5 flex flex-col flex-grow space-y-3">
                   <h3 className="font-serif text-charcoal-900 text-base font-semibold leading-snug">
-                    {getDisplayName(item.variant_details?.sku)}
+                    {item.variant_details?.product_name || "Product"}
                   </h3>
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-charcoal-500 font-medium">
                     <span>Color: {item.variant_details?.color}</span>

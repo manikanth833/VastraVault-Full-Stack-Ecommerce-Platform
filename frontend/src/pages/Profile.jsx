@@ -162,11 +162,7 @@ export default function Profile() {
                             </div>
                             <div className="flex-grow text-xs font-medium space-y-1">
                               <h4 className="font-bold text-sm text-charcoal-900 leading-snug">
-                                {item.variant_details?.sku.includes("KAN")
-                                  ? "Traditional Kanjeevaram Silk Saree"
-                                  : item.variant_details?.sku.includes("BAN")
-                                  ? "Royal Crimson Banarasi Katan Silk Saree"
-                                  : "Pastel Linen Zari Border Saree"}
+                                {item.variant_details?.product_name || "Product"}
                               </h4>
                               <p className="text-charcoal-500">Color: {item.variant_details?.color} | Size: {item.variant_details?.size}</p>
                               <p className="text-charcoal-700">Qty: {item.quantity} | ₹{parseFloat(item.price).toLocaleString("en-IN")} each</p>

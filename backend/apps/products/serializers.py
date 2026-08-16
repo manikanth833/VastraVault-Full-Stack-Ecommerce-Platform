@@ -29,13 +29,26 @@ class ProductImageSerializer(serializers.ModelSerializer):
         fields = ["id", "image_url", "cloudinary_public_id", "is_primary", "sort_order"]
 
 class ProductVariantSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    product_slug = serializers.CharField(source="product.slug", read_only=True)
     images = ProductImageSerializer(many=True, read_only=True)
     stock_qty = serializers.IntegerField(source="inventory.stock_qty", read_only=True)
     final_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = ProductVariant
-        fields = ["id", "sku", "color", "size", "additional_price", "final_price", "stock_qty", "images"]
+        fields = [
+            "id",
+            "product_name",
+            "product_slug",
+            "sku",
+            "color",
+            "size",
+            "additional_price",
+            "final_price",
+            "stock_qty",
+            "images",
+        ]
 
 class ReviewSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source="user.email", read_only=True)

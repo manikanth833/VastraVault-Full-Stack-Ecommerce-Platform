@@ -129,11 +129,7 @@ export default function Cart() {
                 <div className="flex-grow flex flex-col justify-between py-1 space-y-4">
                   <div className="space-y-1 pr-6">
                     <h3 className="font-serif text-charcoal-900 text-base font-semibold">
-                      {item.variant_details?.sku.includes("KAN")
-                        ? "Traditional Kanjeevaram Silk Saree"
-                        : item.variant_details?.sku.includes("BAN")
-                        ? "Royal Crimson Banarasi Katan Silk Saree"
-                        : "Pastel Linen Zari Border Saree"}
+                      {item.variant_details?.product_name || "Product"}
                     </h3>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-charcoal-500 font-medium">
                       <span>Color: {item.variant_details?.color}</span>

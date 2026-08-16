@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const GUEST_CART_TOKEN_KEY = "guestCartToken";
 const AUTH_STORAGE_KEY = "user";
 

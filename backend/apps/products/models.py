@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -76,7 +77,7 @@ class ProductVariant(models.Model):
 
     @property
     def final_price(self):
-        return self.product.base_price + self.additional_price
+        return self.product.base_price + Decimal(str(self.additional_price))
 
     def __str__(self):
         return f"{self.product.name} - {self.color} ({self.sku})"
