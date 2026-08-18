@@ -31,7 +31,8 @@ export default function Profile() {
   const loadAddresses = () => {
     api.get("/api/auth/addresses/")
       .then((res) => {
-        setAddresses(res.data);
+        const addressList = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);
+        setAddresses(addressList);
         setLoadingAddresses(false);
       })
       .catch(() => setLoadingAddresses(false));

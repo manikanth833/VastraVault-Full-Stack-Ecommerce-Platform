@@ -6,6 +6,7 @@ import { Users, ShoppingBag, IndianRupee, ShieldCheck, Check, X, RefreshCw, LogO
 import api from "../services/api";
 import { logoutUser } from "../features/authSlice";
 import { clearCartLocal } from "../features/cartSlice";
+import ConfirmationModal from "../components/ConfirmationModal";
 
 const formatCurrency = (value) => {
   const amount = Number.parseFloat(value || 0);
@@ -95,6 +96,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     loadStats();
@@ -204,7 +206,7 @@ export default function AdminDashboard() {
   const monthlySales = Array.isArray(stats?.monthly_sales) ? stats.monthly_sales : [];
   const isInitialLoading = loading && !stats;
 
-  const handleLogout = () => {
+  const performLogout = () => {
     dispatch(logoutUser());
     dispatch(clearCartLocal());
     navigate("/");
@@ -251,7 +253,7 @@ export default function AdminDashboard() {
               Refresh
             </button>
             <button
-              onClick={handleLogout}
+              onClick={() => setShowLogoutConfirm(true)}
               className="inline-flex items-center gap-2 rounded-full bg-royal-red-900 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-royal-red-800"
             >
               <LogOut className="h-4 w-4" />
@@ -260,6 +262,19 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      <ConfirmationModal
+        open={showLogoutConfirm}
+        title="Are you sure you want to log out?"
+        message="You will need to sign in again to keep using the admin dashboard."
+        confirmLabel="Yes, Logout"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          performLogout();
+        }}
+        onClose={() => setShowLogoutConfirm(false)}
+      />
 
       {/* Platform Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

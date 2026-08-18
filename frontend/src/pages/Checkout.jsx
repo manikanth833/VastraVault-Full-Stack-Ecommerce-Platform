@@ -146,8 +146,6 @@ export default function Checkout() {
         // Standard live Razorpay Checkout Flow
         const options = {
           key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Razorpay Key ID
-          amount: Math.round(parseFloat(orderData.total_amount) * 100),
-          currency: "INR",
           name: "Ananya Sarees",
           description: `Authentic Handloom Order`,
           order_id: orderData.razorpay_order_id,

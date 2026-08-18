@@ -4,6 +4,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { ShoppingBag, Heart, User, LogOut, Menu, X, BarChart3, ShieldCheck } from "lucide-react";
 import { logoutUser } from "../features/authSlice";
 import { clearCartLocal } from "../features/cartSlice";
+import ConfirmationModal from "./ConfirmationModal";
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export default function Navbar() {
   const { isAuthenticated, user } = useSelector((state) => state.auth);
   const { cart } = useSelector((state) => state.cart);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const cartItemCount = cart?.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
   const isSeller = user?.role_name === "SELLER";
@@ -19,10 +21,20 @@ export default function Navbar() {
   const isCustomer = isAuthenticated && !isSeller && !isAdmin;
   const isSellerDashboardPage = location.pathname.startsWith("/seller-dashboard");
 
-  const handleLogout = () => {
+  const performLogout = () => {
     dispatch(logoutUser());
     dispatch(clearCartLocal());
     navigate("/");
+  };
+
+  const openLogoutConfirm = () => {
+    setMobileMenuOpen(false);
+    setShowLogoutConfirm(true);
+  };
+
+  const handleLogoutConfirm = () => {
+    setShowLogoutConfirm(false);
+    performLogout();
   };
 
   const navLinkBase =
@@ -115,7 +127,7 @@ export default function Navbar() {
                 </Link>
 
                 <button
-                  onClick={handleLogout}
+                  onClick={openLogoutConfirm}
                   className="inline-flex items-center rounded-full border border-neutral-200 px-4 py-2 text-sm font-semibold text-charcoal-700 transition-colors hover:border-royal-red-200 hover:text-royal-red-900"
                 >
                   Logout
@@ -142,7 +154,7 @@ export default function Navbar() {
                       <User className="w-6 h-6 stroke-[1.5]" />
                       <span className="hidden lg:inline">{user?.first_name}</span>
                     </Link>
-                    <button onClick={handleLogout} className="text-charcoal-500 hover:text-royal-red-900 transition-colors">
+                    <button onClick={openLogoutConfirm} className="text-charcoal-500 hover:text-royal-red-900 transition-colors">
                       <LogOut className="w-5 h-5" />
                     </button>
                   </div>
@@ -240,7 +252,7 @@ export default function Navbar() {
               <Link to={sellerAccountLink} onClick={() => setMobileMenuOpen(false)} className="block text-charcoal-700 hover:text-royal-red-900 text-base font-medium">
                 {sellerDisplayName}
               </Link>
-              <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="w-full text-left text-charcoal-500 hover:text-royal-red-900 text-base font-medium flex items-center gap-2">
+              <button onClick={openLogoutConfirm} className="w-full text-left text-charcoal-500 hover:text-royal-red-900 text-base font-medium flex items-center gap-2">
                 <LogOut className="w-5 h-5" /> Logout
               </button>
             </>
@@ -252,7 +264,7 @@ export default function Navbar() {
               <Link to="/wishlist" onClick={() => setMobileMenuOpen(false)} className="block text-charcoal-700 hover:text-royal-red-900 text-base font-medium">
                 Wishlist
               </Link>
-              <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="w-full text-left text-charcoal-500 hover:text-royal-red-900 text-base font-medium flex items-center gap-2">
+              <button onClick={openLogoutConfirm} className="w-full text-left text-charcoal-500 hover:text-royal-red-900 text-base font-medium flex items-center gap-2">
                 <LogOut className="w-5 h-5" /> Sign Out
               </button>
             </>
@@ -276,6 +288,15 @@ export default function Navbar() {
 )}
         </div>
       )}
+      <ConfirmationModal
+        open={showLogoutConfirm}
+        title="Are you sure you want to log out?"
+        message="You will need to sign in again to access your account, cart, and order history."
+        confirmLabel="Yes, Logout"
+        cancelLabel="Cancel"
+        onConfirm={handleLogoutConfirm}
+        onClose={() => setShowLogoutConfirm(false)}
+      />
     </nav>
   );
 }
