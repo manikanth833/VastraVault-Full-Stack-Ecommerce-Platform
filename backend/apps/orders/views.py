@@ -316,7 +316,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             status="PENDING"
         )
 
-        # 6. Save Order items and decrement inventory stock
+        # 6. Save Order items; inventory is finalized only after payment succeeds
         for item in cart.items.all():
             OrderItem.objects.create(
                 order=order,
@@ -324,19 +324,6 @@ class OrderViewSet(viewsets.ModelViewSet):
                 quantity=item.quantity,
                 price=item.variant.final_price
             )
-            # Decrement inventory stock
-            inventory = item.variant.inventory
-            inventory.stock_qty -= item.quantity
-            inventory.save()
-
-            # Trigger Celery background check if stock drops below threshold (simulated as task calls)
-            if inventory.stock_qty <= inventory.low_stock_threshold:
-                # We will import background task here
-                from apps.orders.tasks import send_low_stock_alert_email
-                send_low_stock_alert_email.delay(str(item.variant.id), inventory.stock_qty)
-
-        # 7. Clear cart
-        cart.items.all().delete()
 
         return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
 

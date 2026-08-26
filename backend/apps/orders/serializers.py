@@ -78,6 +78,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "coupon",
             "discount_amount",
             "total_amount",
+            "requires_manual_review",
             "razorpay_order_id",
             "created_at",
             "updated_at",
@@ -91,6 +92,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "shipping_charge",
             "discount_amount",
             "total_amount",
+            "requires_manual_review",
             "razorpay_order_id",
             "created_at"
         ]

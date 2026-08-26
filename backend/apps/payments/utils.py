@@ -1,12 +1,52 @@
 import logging
 from decimal import Decimal
 
-from apps.orders.models import Notification, Order
-from apps.orders.tasks import send_order_confirmation_email
+from apps.orders.models import Cart, Notification, Order
+from apps.orders.tasks import send_low_stock_alert_email, send_order_confirmation_email
+from apps.products.models import Inventory
 from apps.payments.models import Payment
 
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_post_payment_side_effects(order):
+    requires_manual_review = False
+
+    cart = Cart.objects.select_for_update().filter(user=order.user).first()
+
+    for item in order.items.select_related("variant").all():
+        inventory = Inventory.objects.select_for_update().filter(variant=item.variant).first()
+        if not inventory:
+            logger.error("Missing inventory for order %s item %s", order.id, item.id)
+            requires_manual_review = True
+            continue
+
+        if inventory.stock_qty < item.quantity:
+            logger.warning(
+                "Oversell clamp for order %s variant %s: stock %s, requested %s",
+                order.id,
+                item.variant_id,
+                inventory.stock_qty,
+                item.quantity,
+            )
+            inventory.stock_qty = 0
+            requires_manual_review = True
+        else:
+            inventory.stock_qty -= item.quantity
+
+        inventory.save(update_fields=["stock_qty"])
+
+        if inventory.stock_qty <= inventory.low_stock_threshold:
+            send_low_stock_alert_email.delay(str(item.variant.id), inventory.stock_qty)
+
+    if cart:
+        cart.items.all().delete()
+
+    if requires_manual_review and not order.requires_manual_review:
+        order.requires_manual_review = True
+        order.save(update_fields=["requires_manual_review"])
+    return requires_manual_review
 
 
 def mark_order_paid(order, payment_id, signature, amount):
@@ -54,6 +94,8 @@ def mark_order_paid(order, payment_id, signature, amount):
     payment.amount = order.total_amount
     payment.status = "SUCCESS"
     payment.save()
+
+    _apply_post_payment_side_effects(order)
 
     order.status = "PROCESSING"
     order.save(update_fields=["status"])

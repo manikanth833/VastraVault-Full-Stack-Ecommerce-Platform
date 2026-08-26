@@ -1,14 +1,16 @@
 import hashlib
 import hmac
 import json
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.orders.models import Order
+from apps.orders.models import Address, Cart, CartItem, Order
 from apps.payments.models import Payment
+from apps.products.models import Category, Inventory, Product, ProductVariant
 
 
 User = get_user_model()
@@ -42,6 +44,35 @@ class RazorpayWebhookTests(TestCase):
         )
         self.url = reverse("payment-webhook")
 
+        self.category = Category.objects.create(name="Silk", slug="silk")
+        self.product = Product.objects.create(
+            category=self.category,
+            seller=self.user,
+            name="Webhook Silk Saree",
+            slug="webhook-silk-saree",
+            description="Test product",
+            base_price=Decimal("1000.00"),
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            sku="HS-WEB-001",
+            color="Blue",
+            size="Free Size",
+        )
+        self.inventory = Inventory.objects.create(variant=self.variant, stock_qty=5, low_stock_threshold=1)
+        self.cart = Cart.objects.create(user=self.user)
+        self.address = Address.objects.create(
+            user=self.user,
+            name="Buyer",
+            phone="9876543210",
+            address_line_1="123 Main Street",
+            city="Kolkata",
+            state="West Bengal",
+            pin_code="700001",
+            address_type="HOME",
+            is_default=True,
+        )
+
     def _post(self, payload, secret="webhook-secret", raw_override=None):
         raw = raw_override if raw_override is not None else json.dumps(payload).encode("utf-8")
         signature = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
@@ -52,6 +83,17 @@ class RazorpayWebhookTests(TestCase):
             content_type="application/json",
             HTTP_X_RAZORPAY_SIGNATURE=signature,
         )
+
+    def _create_order_with_cart(self, quantity=2):
+        self.client.force_authenticate(user=self.user)
+        CartItem.objects.create(cart=self.cart, variant=self.variant, quantity=quantity)
+        response = self.client.post(
+            reverse("order-list"),
+            {"address_id": str(self.address.id)},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        return response.data
 
     def test_valid_payment_captured_marks_order_and_sends_email(self):
         from unittest.mock import patch
@@ -78,6 +120,35 @@ class RazorpayWebhookTests(TestCase):
         self.assertEqual(self.order.status, "PROCESSING")
         self.assertEqual(Payment.objects.filter(order=self.order).count(), 1)
         delay_mock.assert_called_once_with(str(self.order.id))
+
+    def test_payment_captured_clears_cart_and_decrements_stock(self):
+        from unittest.mock import patch
+
+        order_data = self._create_order_with_cart()
+        payload = {
+            "event": "payment.captured",
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "order_id": order_data["razorpay_order_id"],
+                        "id": "pay_webhook_cart_1",
+                        "amount": int(Decimal(str(order_data["total_amount"])) * 100),
+                        "currency": "INR",
+                    }
+                }
+            },
+        }
+
+        with patch("apps.orders.tasks.send_order_confirmation_email.delay"), patch("apps.orders.tasks.send_low_stock_alert_email.delay"):
+            response = self._post(payload)
+
+        self.assertEqual(response.status_code, 200)
+        order = Order.objects.get(id=order_data["id"])
+        order.refresh_from_db()
+        self.inventory.refresh_from_db()
+        self.assertEqual(order.status, "PROCESSING")
+        self.assertEqual(self.inventory.stock_qty, 3)
+        self.assertEqual(self.cart.items.count(), 0)
 
     def test_invalid_signature_returns_400_without_changes(self):
         payload = {

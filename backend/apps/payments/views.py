@@ -87,6 +87,10 @@ class RazorpayWebhookView(views.APIView):
             request.body,
             hashlib.sha256,
         ).hexdigest()
+        print("WEBHOOK SECRET LOADED:", bool(webhook_secret))
+        print("SIGNATURE PRESENT:", bool(signature))
+        print("EXPECTED PREFIX:", expected_signature[:12])
+        print("RECEIVED PREFIX:", (signature or "")[:12])
         if not signature or not hmac.compare_digest(expected_signature, signature):
             return Response({"error": "Invalid webhook signature."}, status=status.HTTP_400_BAD_REQUEST)
 

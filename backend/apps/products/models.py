@@ -10,7 +10,7 @@ class Category(models.Model):
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=150, unique=True, db_index=True)
     description = models.TextField(blank=True, null=True)
-    image_url = models.CharField(max_length=500, blank=True, null=True)
+    image_url = models.URLField(max_length=500, blank=True, null=True)
     parent = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
@@ -29,7 +29,13 @@ class Category(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.name)
+            base_slug = slugify(self.name)
+            slug = base_slug
+            counter = 1
+            while Category.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                counter += 1
+                slug = f"{base_slug}-{counter}"
+            self.slug = slug
         super().save(*args, **kwargs)
 
 class Product(models.Model):
@@ -57,15 +63,21 @@ class Product(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.name)
+            base_slug = slugify(self.name)
+            slug = base_slug
+            counter = 1
+            while Product.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                counter += 1
+                slug = f"{base_slug}-{counter}"
+            self.slug = slug
         super().save(*args, **kwargs)
 
 class ProductVariant(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
     sku = models.CharField(max_length=100, unique=True, db_index=True)
-    color = models.CharField(max_length=50) # e.g. Crimson Red, Ivory Gold
-    size = models.CharField(max_length=50, default="Free Size") # e.g. Free Size, S, M, L
+    color = models.CharField(max_length=50) 
+    size = models.CharField(max_length=50, default="Free Size") 
     additional_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -85,7 +97,7 @@ class ProductVariant(models.Model):
 class ProductImage(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     variant = models.ForeignKey(ProductVariant, on_delete=models.CASCADE, related_name="images")
-    image_url = models.CharField(max_length=500)
+    image_url = models.URLField(max_length=500)
     cloudinary_public_id = models.CharField(max_length=255, blank=True, null=True)
     is_primary = models.BooleanField(default=False)
     sort_order = models.PositiveIntegerField(default=0)
@@ -125,4 +137,5 @@ class Review(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"Review ({self.rating}/5) by {self.user.email} for {self.product.name}"
+        user_identifier = getattr(self.user, 'email', str(self.user))
+        return f"Review ({self.rating}/5) by {user_identifier} for {self.product.name}"

@@ -130,6 +130,7 @@ class Order(models.Model):
     coupon = models.ForeignKey(Coupon, on_delete=models.SET_NULL, null=True, blank=True, related_name="orders")
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    requires_manual_review = models.BooleanField(default=False)
     
     # Razorpay integration
     razorpay_order_id = models.CharField(max_length=255, unique=True, db_index=True)
