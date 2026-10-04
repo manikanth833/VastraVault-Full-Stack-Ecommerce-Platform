@@ -15,8 +15,9 @@ def _apply_post_payment_side_effects(order):
     requires_manual_review = False
 
     cart = Cart.objects.select_for_update().filter(user=order.user).first()
+    locked_items = []
 
-    for item in order.items.select_related("variant").all():
+    for item in order.items.select_related("variant").order_by("variant_id"):
         variant = ProductVariant.objects.select_for_update().select_related("inventory").filter(pk=item.variant_id).first()
         if not variant or not hasattr(variant, "inventory"):
             logger.error("Missing inventory for order %s item %s", order.id, item.id)
@@ -24,18 +25,22 @@ def _apply_post_payment_side_effects(order):
             continue
 
         inventory = variant.inventory
-
         if inventory.stock_qty < item.quantity:
-            message = (
-                f"Oversell clamp for order {order.id} variant {variant.id}: "
-                f"stock {inventory.stock_qty}, requested {item.quantity}"
+            logger.warning(
+                "Insufficient inventory for order %s variant %s: stock %s, requested %s",
+                order.id,
+                variant.id,
+                inventory.stock_qty,
+                item.quantity,
             )
-            logger.warning(message)
-            requires_manual_review = True
-            inventory.stock_qty = 0
-            inventory.save(update_fields=["stock_qty"])
-            continue
+            return True
 
+        locked_items.append((item, variant, inventory))
+
+    if requires_manual_review:
+        return True
+
+    for item, variant, inventory in locked_items:
         inventory.stock_qty -= item.quantity
 
         inventory.save(update_fields=["stock_qty"])
@@ -46,9 +51,6 @@ def _apply_post_payment_side_effects(order):
     if cart:
         cart.items.all().delete()
 
-    if requires_manual_review and not order.requires_manual_review:
-        order.requires_manual_review = True
-        order.save(update_fields=["requires_manual_review"])
     return requires_manual_review
 
 
@@ -96,7 +98,11 @@ def mark_order_paid(order, payment_id, signature, amount):
     payment.status = "SUCCESS"
     payment.save()
 
-    _apply_post_payment_side_effects(order)
+    requires_manual_review = _apply_post_payment_side_effects(order)
+    if requires_manual_review:
+        order.requires_manual_review = True
+        order.save(update_fields=["requires_manual_review"])
+        return False
 
     order.status = "PROCESSING"
     order.save(update_fields=["status"])

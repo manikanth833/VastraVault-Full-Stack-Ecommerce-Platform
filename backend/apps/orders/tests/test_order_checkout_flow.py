@@ -7,7 +7,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.orders.models import Address, Cart, CartItem, Order
+from apps.orders.models import Address, Cart, CartItem, Order, OrderItem
 from apps.payments.models import Payment
 from apps.products.models import Category, Inventory, Product, ProductVariant
 
@@ -195,7 +195,7 @@ class OrderCheckoutFlowTests(TestCase):
         self.assertEqual(self.cart.items.count(), 0)
         self.assertEqual(Payment.objects.filter(order=order, status="SUCCESS").count(), 1)
 
-    def test_oversell_clamps_stock_and_flags_order_for_review(self):
+    def test_oversell_does_not_complete_order_or_consume_remaining_stock(self):
         order_data = self._create_order(quantity=3)
         self.inventory.stock_qty = 1
         self.inventory.save(update_fields=["stock_qty", "updated_at"])
@@ -205,12 +205,51 @@ class OrderCheckoutFlowTests(TestCase):
         with patch("apps.orders.tasks.send_order_confirmation_email.delay"), patch("apps.orders.tasks.send_low_stock_alert_email.delay") as stock_alert_mock:
             response = self._verify_payment(order_data, "pay_oversell_1")
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
         order = Order.objects.get(id=order_data["id"])
         order.refresh_from_db()
         self.inventory.refresh_from_db()
-        self.assertEqual(order.status, "PROCESSING")
+        self.assertEqual(order.status, "PENDING")
         self.assertTrue(order.requires_manual_review)
+        self.assertEqual(self.inventory.stock_qty, 1)
+        self.assertEqual(self.cart.items.count(), 1)
+        stock_alert_mock.assert_not_called()
+
+    def test_competing_paid_orders_cannot_consume_same_remaining_stock(self):
+        first_order_data = self._create_order(quantity=1)
+        first_order = Order.objects.get(id=first_order_data["id"])
+        second_order = Order.objects.create(
+            user=self.user,
+            shipping_address=first_order.shipping_address,
+            subtotal=first_order.subtotal,
+            tax_amount=first_order.tax_amount,
+            shipping_charge=first_order.shipping_charge,
+            total_amount=first_order.total_amount,
+            razorpay_order_id="order_competing_2",
+            status="PENDING",
+        )
+        OrderItem.objects.create(
+            order=second_order,
+            variant=self.variant,
+            quantity=1,
+            price=self.variant.final_price,
+        )
+        self.inventory.stock_qty = 1
+        self.inventory.save(update_fields=["stock_qty", "updated_at"])
+
+        from unittest.mock import patch
+
+        with patch("apps.orders.tasks.send_order_confirmation_email.delay"), patch("apps.orders.tasks.send_low_stock_alert_email.delay"):
+            first_response = self._verify_payment(first_order_data, "pay_competing_1")
+            second_response = self._verify_payment(
+                {"razorpay_order_id": second_order.razorpay_order_id},
+                "pay_competing_2",
+            )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 400)
+        self.inventory.refresh_from_db()
+        second_order.refresh_from_db()
         self.assertEqual(self.inventory.stock_qty, 0)
-        self.assertEqual(self.cart.items.count(), 0)
-        stock_alert_mock.assert_called_once()
+        self.assertEqual(second_order.status, "PENDING")
+        self.assertTrue(second_order.requires_manual_review)
