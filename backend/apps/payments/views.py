@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.conf import settings
+from rest_framework.exceptions import ValidationError
 from apps.orders.models import Order
 from apps.payments.models import Payment
 from apps.payments.serializers import PaymentVerificationSerializer
@@ -54,6 +55,9 @@ class PaymentVerificationView(views.APIView):
                 is_verified = False
 
         if not is_verified:
+            existing_payment = Payment.objects.filter(order=order, status="SUCCESS").first()
+            if existing_payment:
+                return Response({"error": "Payment verification failed."}, status=status.HTTP_400_BAD_REQUEST)
             Payment.objects.update_or_create(
                 order=order,
                 defaults={

@@ -387,20 +387,21 @@ class OrderViewSet(viewsets.ModelViewSet):
         if role_name == "SELLER":
             if new_status not in ["PROCESSING", "SHIPPED"]:
                 return Response({"error": "Sellers can only set status to PROCESSING or SHIPPED"}, status=status.HTTP_403_FORBIDDEN)
+        elif role_name == "CUSTOMER":
+            return Response({"error": "Customers cannot update order status."}, status=status.HTTP_403_FORBIDDEN)
 
         order.status = new_status
         order.save()
         return Response(OrderSerializer(order).data)
 
     @action(detail=True, methods=["POST"], permission_classes=[permissions.IsAuthenticated])
+    @transaction.atomic
     def cancel(self, request, pk=None):
-        order = self.get_object()
-
-        if order.user_id != request.user.id:
-            return Response(
-                {"error": "Only the customer who placed this order can cancel it."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        order = get_object_or_404(
+            Order.objects.select_for_update(),
+            pk=pk,
+            user=request.user,
+        )
         if order.status != "PENDING":
             return Response(
                 {"error": "Only pending orders can be cancelled."},

@@ -118,6 +118,24 @@ class PaymentVerificationTests(TestCase):
         self.assertEqual(payment.razorpay_payment_id, "pay_test_123")
         delay_mock.assert_called_once_with(str(self.order.id))
 
+    def test_invalid_callback_cannot_downgrade_successful_payment(self):
+        from unittest.mock import patch
+
+        with patch("apps.orders.tasks.send_order_confirmation_email.delay"):
+            success = self._post(
+                self.order.razorpay_order_id,
+                "pay_protected_success",
+                self._signature(self.order.razorpay_order_id, "pay_protected_success"),
+            )
+
+        self.assertEqual(success.status_code, 200)
+        invalid = self._post(self.order.razorpay_order_id, "pay_tampered", "bad-signature")
+
+        self.assertEqual(invalid.status_code, 400)
+        payment = Payment.objects.get(order=self.order)
+        self.assertEqual(payment.status, "SUCCESS")
+        self.assertEqual(payment.razorpay_payment_id, "pay_protected_success")
+
     def test_wrong_signature_creates_failed_payment_and_keeps_order_pending(self):
         response = self._post(self.order.razorpay_order_id, "pay_bad_1", "bad-signature")
 

@@ -208,7 +208,6 @@ class OrderManagementTests(TestCase):
         self.assertIn(self.variant_two.sku, response.data["error"])
         self.assertEqual(Order.objects.count(), 0)
 
-    @unittest.expectedFailure
     def test_customer_update_status_is_rejected(self):
         order = self._create_order(self.customer, [(self.variant_one, 1)], "order-customer-status")
         self.client.force_authenticate(user=self.customer)

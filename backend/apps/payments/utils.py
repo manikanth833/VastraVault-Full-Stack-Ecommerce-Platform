@@ -72,6 +72,13 @@ def mark_order_paid(order, payment_id, signature, amount):
         return False
 
     existing_payment = Payment.objects.filter(razorpay_payment_id=payment_id, status="SUCCESS").first()
+    if existing_payment and existing_payment.order_id != order.id:
+        logger.warning(
+            "Payment %s was already recorded for another order %s",
+            payment_id,
+            existing_payment.order_id,
+        )
+        return False
     if existing_payment and existing_payment.order_id == order.id:
         logger.info("Duplicate successful payment delivery for order %s and payment %s", order.id, payment_id)
         return False
