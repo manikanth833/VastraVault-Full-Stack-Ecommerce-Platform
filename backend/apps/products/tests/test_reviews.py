@@ -1,5 +1,4 @@
 from decimal import Decimal
-import unittest
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -97,23 +96,28 @@ class ReviewViewSetTests(TestCase):
         return [item["id"] for item in response.data]
 
     def test_create_review_happy_path_succeeds(self):
+        self._create_order("DELIVERED", self.product)
         response = self._create_review(self.product, 5)
 
         self.assertEqual(response.status_code, 201)
-        self.assertTrue(Review.objects.filter(product=self.product, user=self.user, rating=5).exists())
+        review = Review.objects.get(product=self.product, user=self.user)
+        self.assertEqual(review.rating, 5)
+        self.assertTrue(review.verified_purchase)
 
     def test_rating_zero_is_rejected(self):
+        self._create_order("DELIVERED", self.product)
         response = self._create_review(self.product, 0)
 
         self.assertEqual(response.status_code, 400)
 
     def test_rating_six_is_rejected(self):
+        self._create_order("DELIVERED", self.product)
         response = self._create_review(self.product, 6)
 
         self.assertEqual(response.status_code, 400)
 
-    @unittest.expectedFailure
     def test_duplicate_review_for_same_product_is_rejected(self):
+        self._create_order("DELIVERED", self.product)
         first = self._create_review(self.product, 5)
         second = self._create_review(self.product, 4)
 
@@ -133,8 +137,31 @@ class ReviewViewSetTests(TestCase):
 
         response = self._create_review(self.product, 5)
 
-        self.assertEqual(response.status_code, 201)
-        self.assertFalse(Review.objects.get(product=self.product, user=self.user).verified_purchase)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Review.objects.filter(product=self.product, user=self.user).exists())
+
+    def test_review_creation_is_rejected_without_a_purchase(self):
+        response = self._create_review(self.product, 5)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Review.objects.filter(product=self.product, user=self.user).exists())
+
+    def test_user_can_update_and_delete_only_their_own_review(self):
+        self._create_order("DELIVERED", self.product)
+        create_response = self._create_review(self.product, 5)
+        review_id = create_response.data["id"]
+
+        self.client.force_authenticate(user=self.other_user)
+        update_response = self.client.patch(
+            reverse("review-detail", args=[review_id]),
+            {"comment": "Tampered"},
+            format="json",
+        )
+        delete_response = self.client.delete(reverse("review-detail", args=[review_id]))
+
+        self.assertEqual(update_response.status_code, 404)
+        self.assertEqual(delete_response.status_code, 404)
+        self.assertTrue(Review.objects.filter(id=review_id, user=self.user).exists())
 
     def test_list_without_product_id_returns_no_results(self):
         Review.objects.create(product=self.product, user=self.user, rating=5, comment="Great")

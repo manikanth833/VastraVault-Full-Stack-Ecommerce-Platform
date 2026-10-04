@@ -1,4 +1,5 @@
 from rest_framework import viewsets, permissions, status, filters
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.db.models import Avg, Q
@@ -261,20 +262,28 @@ class ReviewViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def get_queryset(self):
-        return Review.objects.filter(product_id=self.request.query_params.get("product_id"))
+        queryset = Review.objects.filter(product_id=self.request.query_params.get("product_id"))
+        if self.action in ["update", "partial_update", "destroy"]:
+            queryset = queryset.filter(user=self.request.user)
+        return queryset
 
     def perform_create(self, serializer):
         product_id = self.request.data.get("product_id")
-        product = Product.objects.get(id=product_id)
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            raise ValidationError({"product_id": "Product not found."})
         
-        # Check if the user has a verified purchase of any variant of this product
+        # Reviews require a completed delivery for this product.
         verified = Order.objects.filter(
             user=self.request.user,
             status="DELIVERED",
             items__variant__product=product
         ).exists()
+        if not verified:
+            raise ValidationError({"detail": "You can review this product only after it has been delivered."})
+
+        if Review.objects.filter(product=product, user=self.request.user).exists():
+            raise ValidationError({"detail": "You have already reviewed this product."})
         
-        serializer.save(
-            product=product,
-            verified_purchase=verified
-        )
+        serializer.save(product=product, verified_purchase=True)
