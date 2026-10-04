@@ -1,7 +1,8 @@
+from decimal import Decimal
 from rest_framework import serializers
+
 from apps.orders.models import Cart, CartItem, Wishlist, Order, OrderItem, Coupon
 from apps.products.serializers import ProductVariantSerializer
-from decimal import Decimal
 class CartItemSerializer(serializers.ModelSerializer):
     variant_details = ProductVariantSerializer(source="variant", read_only=True)
     item_total = serializers.SerializerMethodField()
@@ -25,7 +26,7 @@ class CartSerializer(serializers.ModelSerializer):
         fields = ["id", "items", "subtotal", "tax", "shipping", "total"]
 
     def get_subtotal(self, obj):
-        return sum(item.quantity * item.variant.final_price for item in obj.items.all())
+        return sum((item.quantity * item.variant.final_price for item in obj.items.all()), Decimal("0.00"))
 
     def get_tax(self, obj):
         # 12% GST standard on sarees / apparel
@@ -34,7 +35,7 @@ class CartSerializer(serializers.ModelSerializer):
     def get_shipping(self, obj):
         # Free shipping above 2000 INR, else 150 INR
         subtotal = self.get_subtotal(obj)
-        if subtotal == 0 or subtotal > 2000:
+        if subtotal == Decimal("0.00") or subtotal > Decimal("2000.00"):
             return Decimal("0.00")
         return Decimal("150.00")
 
@@ -49,6 +50,10 @@ class WishlistSerializer(serializers.ModelSerializer):
         fields = ["id", "variant", "variant_details", "created_at"]
 
 class CouponSerializer(serializers.ModelSerializer):
+    value = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.00"))
+    min_purchase = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.00"))
+    max_discount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.00"), allow_null=True, required=False)
+
     class Meta:
         model = Coupon
         fields = ["id", "code", "discount_type", "value", "min_purchase", "max_discount"]

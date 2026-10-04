@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator
@@ -45,9 +46,9 @@ class Coupon(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=50, unique=True, db_index=True)
     discount_type = models.CharField(max_length=20, choices=COUPON_TYPES, default="PERCENTAGE")
-    value = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
-    min_purchase = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, validators=[MinValueValidator(0)])
-    max_discount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True, validators=[MinValueValidator(0)])
+    value = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
+    min_purchase = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(Decimal("0.00"))])
+    max_discount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True, validators=[MinValueValidator(Decimal("0.00"))])
     active = models.BooleanField(default=True, db_index=True)
     start_date = models.DateTimeField(default=timezone.now)
     end_date = models.DateTimeField()
@@ -99,6 +100,7 @@ class Wishlist(models.Model):
 
     class Meta:
         unique_together = ("user", "variant")
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.user.email} saved {self.variant.sku}"
@@ -124,12 +126,12 @@ class Order(models.Model):
     status = models.CharField(max_length=20, choices=ORDER_STATUS, default="PENDING", db_index=True)
     
     # Financial breakdown
-    subtotal = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
-    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    shipping_charge = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    shipping_charge = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     coupon = models.ForeignKey(Coupon, on_delete=models.SET_NULL, null=True, blank=True, related_name="orders")
-    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    total_amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
     requires_manual_review = models.BooleanField(default=False)
     
     # Razorpay integration
@@ -149,7 +151,7 @@ class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
     variant = models.ForeignKey(ProductVariant, on_delete=models.SET_NULL, null=True, related_name="order_items")
     quantity = models.PositiveIntegerField()
-    price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)]) # Store item price at the moment of order
+    price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))]) # Store item price at the moment of order
 
     def __str__(self):
         return f"{self.quantity} x {self.variant.sku if self.variant else 'Deleted Item'}"

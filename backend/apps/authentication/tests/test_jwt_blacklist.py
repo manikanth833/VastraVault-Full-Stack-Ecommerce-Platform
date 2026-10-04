@@ -29,6 +29,9 @@ class JwtBlacklistTests(TestCase):
             password="StrongPass123!",
         )
 
+        self.user.is_email_verified = True
+        self.user.save(update_fields=["is_email_verified"])
+
     def login(self):
         response = self.client.post(
             self.login_url,

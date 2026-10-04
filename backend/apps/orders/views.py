@@ -1,4 +1,5 @@
 import uuid
+import logging
 from decimal import Decimal
 from django.shortcuts import get_object_or_404
 from django.db import transaction
@@ -13,11 +14,11 @@ from apps.orders.serializers import (
     OrderSerializer,
     CouponSerializer
 )
-from apps.authentication.permissions import IsAdminUser, IsSellerUser
 from django.conf import settings
 from apps.orders.utils import calculate_pricing, CouponPricingError
 
-# Safe Razorpay initialization with mock fallback for dev
+logger = logging.getLogger(__name__)
+
 try:
     import razorpay
     if settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET:
@@ -26,6 +27,37 @@ try:
         razorpay_client = None
 except ImportError:
     razorpay_client = None
+
+
+class RazorpayOrderCreationError(Exception):
+    pass
+
+
+def _create_razorpay_order(total_amount):
+    if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
+        if settings.DEBUG:
+            return f"order_mock_{uuid.uuid4().hex[:12]}"
+        raise RazorpayOrderCreationError("Razorpay credentials are not configured.")
+
+    if razorpay_client is None:
+        raise RazorpayOrderCreationError("Razorpay client is not available.")
+
+    try:
+        razorpay_order = razorpay_client.order.create({
+            "amount": int(total_amount * 100),
+            "currency": "INR",
+            "receipt": f"receipt_order_{uuid.uuid4().hex[:6]}",
+        })
+    except Exception as exc:
+        logger.exception("Razorpay order creation failed")
+        raise RazorpayOrderCreationError("Unable to create a Razorpay order.") from exc
+
+    razorpay_order_id = razorpay_order.get("id")
+    if not razorpay_order_id:
+        logger.error("Razorpay order creation returned no order id")
+        raise RazorpayOrderCreationError("Razorpay returned an invalid order.")
+    return razorpay_order_id
+
 
 class CartViewSet(viewsets.ViewSet):
     permission_classes = [permissions.AllowAny]
@@ -188,9 +220,11 @@ class CartViewSet(viewsets.ViewSet):
 class WishlistViewSet(viewsets.ModelViewSet):
     serializer_class = WishlistSerializer
     permission_classes = [permissions.IsAuthenticated]
+    ordering = ["-created_at"]
+    ordering_fields = ["created_at", "id"]
 
     def get_queryset(self):
-        return Wishlist.objects.filter(user=self.request.user)
+        return Wishlist.objects.filter(user=self.request.user).order_by("-created_at")
 
     def create(self, request, *args, **kwargs):
         variant_id = request.data.get("variant_id")
@@ -213,7 +247,10 @@ class CouponViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["POST"])
     def validate(self, request):
         code = request.data.get("code", "").upper()
-        amount = float(request.data.get("amount", 0))
+        try:
+            amount = Decimal(str(request.data.get("amount", "0")))
+        except Exception:
+            return Response({"valid": False, "error": "Invalid amount."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             pricing = calculate_pricing(amount, code, strict_coupon=True)
@@ -230,35 +267,50 @@ class CouponViewSet(viewsets.ViewSet):
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
+    ordering = ["-created_at"]
+    ordering_fields = ["created_at", "status", "subtotal", "total_amount"]
 
     def get_queryset(self):
         user = self.request.user
         role_name = user.role.name if user.role else "CUSTOMER"
 
         if role_name == "ADMIN":
-            return Order.objects.all()
+            return Order.objects.all().order_by("-created_at")
         elif role_name == "SELLER":
             # Return orders that contain products belonging to this seller
-            return Order.objects.filter(items__variant__product__seller=user).distinct()
+            return Order.objects.filter(items__variant__product__seller=user).distinct().order_by("-created_at")
         else:
             # Customer
-            return Order.objects.filter(user=user)
+            return Order.objects.filter(user=user).order_by("-created_at")
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         user = request.user
-        cart = get_object_or_404(Cart, user=user)
+        cart = get_object_or_404(Cart.objects.select_for_update(), user=user)
         address_id = request.data.get("address_id")
         coupon_code = request.data.get("coupon_code")
+        cart_items = list(cart.items.select_related("variant", "variant__inventory").all())
 
-        if not cart.items.exists():
+        if not cart_items:
             return Response({"error": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
 
+        variant_ids = [item.variant_id for item in cart_items]
+        locked_variants = {
+            variant.id: variant
+            for variant in ProductVariant.objects.select_for_update().select_related("inventory").filter(id__in=variant_ids)
+        }
+
         # 1. Verify Stock
-        for item in cart.items.all():
-            if item.variant.inventory.stock_qty < item.quantity:
+        for item in cart_items:
+            variant = locked_variants.get(item.variant_id)
+            if not variant or not hasattr(variant, "inventory"):
                 return Response(
-                    {"error": f"Insufficient stock for {item.variant.sku}. Only {item.variant.inventory.stock_qty} left."},
+                    {"error": f"Inventory record not found for {item.variant.sku}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if variant.inventory.stock_qty < item.quantity:
+                return Response(
+                    {"error": f"Insufficient stock for {variant.sku}. Only {variant.inventory.stock_qty} left."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -276,7 +328,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         }
 
         # 3. Calculate values
-        subtotal = sum((item.quantity * item.variant.final_price for item in cart.items.all()), Decimal("0.00"))
+        subtotal = sum((item.quantity * item.variant.final_price for item in cart_items), Decimal("0.00"))
         pricing = calculate_pricing(subtotal, coupon_code, strict_coupon=False)
         discount_amount = pricing["discount_amount"]
         tax_amount = pricing["tax_amount"]
@@ -284,23 +336,15 @@ class OrderViewSet(viewsets.ModelViewSet):
         total_amount = pricing["total_amount"]
         coupon_obj = pricing["coupon"]
 
+        # 4. Integrate Razorpay Order creation
+        try:
+            razorpay_order_id = _create_razorpay_order(total_amount)
+        except RazorpayOrderCreationError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
         if coupon_obj:
             coupon_obj.usage_count += 1
             coupon_obj.save(update_fields=["usage_count"])
-
-        # 4. Integrate Razorpay Order creation
-        razorpay_order_id = f"order_mock_{uuid.uuid4().hex[:12]}"
-        if razorpay_client:
-            try:
-                razorpay_order = razorpay_client.order.create({
-                    "amount": int(total_amount * 100), # Amount in paise
-                    "currency": "INR",
-                    "receipt": f"receipt_order_{uuid.uuid4().hex[:6]}",
-                })
-                razorpay_order_id = razorpay_order["id"]
-            except Exception as e:
-                # Log error or fallback to mock order in staging
-                pass
 
         # 5. Create Order
         order = Order.objects.create(
@@ -317,7 +361,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         )
 
         # 6. Save Order items; inventory is finalized only after payment succeeds
-        for item in cart.items.all():
+        for item in cart_items:
             OrderItem.objects.create(
                 order=order,
                 variant=item.variant,
@@ -335,7 +379,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         valid_statuses = [choice[0] for choice in Order.ORDER_STATUS]
         if new_status not in valid_statuses:
             return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # RBAC Check: Seller can only change status to PROCESSING or SHIPPED, and only if they own items
         user = request.user
         role_name = user.role.name if user.role else "CUSTOMER"
@@ -343,7 +387,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         if role_name == "SELLER":
             if new_status not in ["PROCESSING", "SHIPPED"]:
                 return Response({"error": "Sellers can only set status to PROCESSING or SHIPPED"}, status=status.HTTP_403_FORBIDDEN)
-        
+
         order.status = new_status
         order.save()
         return Response(OrderSerializer(order).data)

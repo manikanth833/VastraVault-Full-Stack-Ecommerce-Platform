@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 from apps.products.models import Category, Product, ProductVariant, ProductImage, Inventory, Review
 from django.db.models import Avg

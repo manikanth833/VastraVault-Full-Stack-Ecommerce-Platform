@@ -86,6 +86,69 @@ class OrderCheckoutFlowTests(TestCase):
         self.assertEqual(self.cart.items.count(), 1)
         self.assertEqual(Order.objects.get(id=order_data["id"]).status, "PENDING")
 
+    @override_settings(
+        DEBUG=False,
+        RAZORPAY_KEY_ID="rzp_test_valid",
+        RAZORPAY_KEY_SECRET="test-secret",
+    )
+    def test_successful_razorpay_order_creation_uses_gateway_order_id(self):
+        from unittest.mock import Mock, patch
+
+        razorpay_client = Mock()
+        razorpay_client.order.create.return_value = {"id": "order_live_123"}
+
+        with patch("apps.orders.views.razorpay_client", razorpay_client):
+            order_data = self._create_order()
+
+        self.assertEqual(order_data["razorpay_order_id"], "order_live_123")
+        razorpay_client.order.create.assert_called_once()
+
+    @override_settings(
+        DEBUG=False,
+        RAZORPAY_KEY_ID="rzp_test_invalid",
+        RAZORPAY_KEY_SECRET="invalid-secret",
+    )
+    def test_failed_razorpay_order_creation_does_not_create_mock_order(self):
+        from unittest.mock import Mock, patch
+
+        CartItem.objects.create(cart=self.cart, variant=self.variant, quantity=2)
+        razorpay_client = Mock()
+        razorpay_client.order.create.side_effect = RuntimeError("gateway unavailable")
+
+        with patch("apps.orders.views.razorpay_client", razorpay_client):
+            response = self.client.post(
+                self.order_url,
+                {"address_id": str(self.address.id)},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("Unable to create a Razorpay order.", response.data["error"])
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertTrue(self.cart.items.exists())
+
+    @override_settings(DEBUG=True, RAZORPAY_KEY_ID="", RAZORPAY_KEY_SECRET="")
+    def test_debug_without_credentials_uses_mock_order(self):
+        from unittest.mock import patch
+
+        with patch("apps.orders.views.razorpay_client", None):
+            order_data = self._create_order()
+
+        self.assertTrue(order_data["razorpay_order_id"].startswith("order_mock_"))
+
+    @override_settings(DEBUG=False, RAZORPAY_KEY_ID="", RAZORPAY_KEY_SECRET="")
+    def test_production_without_credentials_does_not_use_mock_order(self):
+        CartItem.objects.create(cart=self.cart, variant=self.variant, quantity=2)
+        response = self.client.post(
+            self.order_url,
+            {"address_id": str(self.address.id)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("Razorpay credentials are not configured.", response.data["error"])
+        self.assertEqual(Order.objects.count(), 0)
+
     def test_failed_payment_then_retry_keeps_cart_until_success(self):
         order_data = self._create_order()
 

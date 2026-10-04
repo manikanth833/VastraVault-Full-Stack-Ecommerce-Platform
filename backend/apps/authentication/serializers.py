@@ -179,6 +179,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise serializers.ValidationError({"detail": "Invalid email or password"})
 
         authenticated_user.clear_login_lock()
+        if not authenticated_user.is_email_verified:
+            raise serializers.ValidationError(
+                {"detail": "Please verify your email before signing in."}
+            )
+
         log_event(request, "LOGIN_SUCCESS", user=authenticated_user)
         self.user = authenticated_user
 

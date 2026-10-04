@@ -50,7 +50,7 @@ class Product(models.Model):
     slug = models.SlugField(max_length=300, unique=True, db_index=True)
     description = models.TextField()
     brand = models.CharField(max_length=100, default="Ananya")
-    base_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    base_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
     is_active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -81,11 +81,14 @@ class ProductVariant(models.Model):
     additional_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        default=0.00,
-        validators=[MinValueValidator(0)]
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))]
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["id"]
 
     @property
     def final_price(self):

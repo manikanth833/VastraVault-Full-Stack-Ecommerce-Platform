@@ -2,6 +2,7 @@ import json
 import logging
 import hmac
 import hashlib
+from decimal import Decimal
 from rest_framework import views, permissions, status
 from rest_framework.response import Response
 from django.db import transaction
@@ -65,7 +66,16 @@ class PaymentVerificationView(views.APIView):
             )
             return Response({"error": "Payment verification failed."}, status=status.HTTP_400_BAD_REQUEST)
 
-        processed = mark_order_paid(order, payment_id, signature, int(order.total_amount * 100))
+        try:
+            processed = mark_order_paid(order, payment_id, signature, int(Decimal(str(order.total_amount)) * 100))
+        except ValidationError as exc:
+            Order.objects.filter(id=order.id).update(requires_manual_review=True)
+            logger.warning("Stock verification failed for order %s: %s", order.id, exc)
+            detail = exc.detail
+            if isinstance(detail, list) and detail:
+                detail = detail[0]
+            return Response({"error": str(detail)}, status=status.HTTP_400_BAD_REQUEST)
+
         if not processed and order.status != "PROCESSING":
             return Response({"error": "Payment verification failed."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -87,11 +97,8 @@ class RazorpayWebhookView(views.APIView):
             request.body,
             hashlib.sha256,
         ).hexdigest()
-        print("WEBHOOK SECRET LOADED:", bool(webhook_secret))
-        print("SIGNATURE PRESENT:", bool(signature))
-        print("EXPECTED PREFIX:", expected_signature[:12])
-        print("RECEIVED PREFIX:", (signature or "")[:12])
         if not signature or not hmac.compare_digest(expected_signature, signature):
+            logger.warning("Invalid Razorpay webhook signature for payload of %s bytes", len(request.body))
             return Response({"error": "Invalid webhook signature."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
@@ -113,6 +120,16 @@ class RazorpayWebhookView(views.APIView):
                     order = Order.objects.select_for_update().filter(razorpay_order_id=order_id).first()
                     if not order:
                         logger.info("Ignoring payment.captured webhook for unknown order %s", order_id)
+                        return Response({"status": "received"}, status=status.HTTP_200_OK)
+                    expected_amount = int(Decimal(str(order.total_amount)) * 100)
+                    if amount != expected_amount:
+                        Order.objects.filter(id=order.id).update(requires_manual_review=True)
+                        logger.warning(
+                            "Webhook amount mismatch for order %s: expected %s paise, got %s paise",
+                            order_id,
+                            expected_amount,
+                            amount,
+                        )
                         return Response({"status": "received"}, status=status.HTTP_200_OK)
                     processed = mark_order_paid(order, payment_id, signature, amount)
                     if not processed:

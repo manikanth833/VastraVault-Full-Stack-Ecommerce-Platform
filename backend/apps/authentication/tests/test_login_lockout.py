@@ -37,6 +37,11 @@ class LoginLockoutTests(TestCase):
             password=self.password,
         )
 
+        self.user.is_email_verified = True
+        self.user.save(update_fields=["is_email_verified"])
+        self.other_user.is_email_verified = True
+        self.other_user.save(update_fields=["is_email_verified"])
+
     def login(self, email, password):
         return self.client.post(self.url, {"email": email, "password": password}, format="json")
 

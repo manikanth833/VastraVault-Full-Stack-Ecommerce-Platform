@@ -66,6 +66,12 @@ class CustomTokenRefreshView(TokenRefreshView):
             except TokenError:
                 pass
 
+        if user and not user.is_email_verified:
+            return Response(
+                {"detail": "Please verify your email before refreshing tokens."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         response = super().post(request, *args, **kwargs)
         if response.status_code == 200:
             log_event(request, "TOKEN_REFRESH", user=user, email=user.email if user else "")

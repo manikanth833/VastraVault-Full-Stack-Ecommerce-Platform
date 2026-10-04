@@ -63,9 +63,11 @@ class CategoryViewSet(viewsets.ModelViewSet):
         return super().get_queryset()
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.filter(is_active=True).prefetch_related("variants__images", "variants__inventory", "reviews")
+    queryset = Product.objects.filter(is_active=True).prefetch_related("variants__images", "variants__inventory", "reviews").order_by("-created_at")
     lookup_field = "slug"
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    ordering = ["-created_at"]
+    ordering_fields = ["created_at", "base_price", "name", "slug", "id"]
     search_fields = ["name", "description", "brand", "category__name"]
     category_aliases = {
         "all": None,
@@ -170,14 +172,14 @@ class ProductViewSet(viewsets.ModelViewSet):
         ):
             queryset = Product.objects.filter(seller=self.request.user).prefetch_related(
                 "variants__images", "variants__inventory", "reviews"
-            )
+            ).order_by("-created_at")
         
         # If the user is an authenticated seller requesting their own products
         if self.request.query_params.get("my_products") == "true":
-            if self.request.user.is_authenticated and self.request.user.role.name == "SELLER":
+            if self.request.user.is_authenticated and getattr(self.request.user, "role", None) and self.request.user.role.name == "SELLER":
                 return Product.objects.filter(seller=self.request.user).prefetch_related(
                     "variants__images", "variants__inventory", "reviews"
-                )
+                ).order_by("-created_at")
         
         # Faceted Filtering
         category = self._resolve_category(self.request.query_params.get("category"))

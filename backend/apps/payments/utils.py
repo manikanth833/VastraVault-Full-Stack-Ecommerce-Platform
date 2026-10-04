@@ -1,9 +1,10 @@
 import logging
 from decimal import Decimal
+from django.db import transaction
 
 from apps.orders.models import Cart, Notification, Order
 from apps.orders.tasks import send_low_stock_alert_email, send_order_confirmation_email
-from apps.products.models import Inventory
+from apps.products.models import ProductVariant
 from apps.payments.models import Payment
 
 
@@ -16,24 +17,26 @@ def _apply_post_payment_side_effects(order):
     cart = Cart.objects.select_for_update().filter(user=order.user).first()
 
     for item in order.items.select_related("variant").all():
-        inventory = Inventory.objects.select_for_update().filter(variant=item.variant).first()
-        if not inventory:
+        variant = ProductVariant.objects.select_for_update().select_related("inventory").filter(pk=item.variant_id).first()
+        if not variant or not hasattr(variant, "inventory"):
             logger.error("Missing inventory for order %s item %s", order.id, item.id)
             requires_manual_review = True
             continue
 
+        inventory = variant.inventory
+
         if inventory.stock_qty < item.quantity:
-            logger.warning(
-                "Oversell clamp for order %s variant %s: stock %s, requested %s",
-                order.id,
-                item.variant_id,
-                inventory.stock_qty,
-                item.quantity,
+            message = (
+                f"Oversell clamp for order {order.id} variant {variant.id}: "
+                f"stock {inventory.stock_qty}, requested {item.quantity}"
             )
-            inventory.stock_qty = 0
+            logger.warning(message)
             requires_manual_review = True
-        else:
-            inventory.stock_qty -= item.quantity
+            inventory.stock_qty = 0
+            inventory.save(update_fields=["stock_qty"])
+            continue
+
+        inventory.stock_qty -= item.quantity
 
         inventory.save(update_fields=["stock_qty"])
 
@@ -49,8 +52,10 @@ def _apply_post_payment_side_effects(order):
     return requires_manual_review
 
 
+@transaction.atomic
 def mark_order_paid(order, payment_id, signature, amount):
-    expected_amount = int(Decimal(order.total_amount) * 100)
+    order = Order.objects.select_for_update().get(pk=order.pk)
+    expected_amount = int(Decimal(str(order.total_amount)) * 100)
     if expected_amount <= 0:
         logger.error(
             "Refusing to mark order %s paid because total_amount is invalid: %s",
@@ -60,12 +65,8 @@ def mark_order_paid(order, payment_id, signature, amount):
         return False
 
     if amount != expected_amount:
-        logger.error(
-            "Payment amount mismatch for order %s: expected %s paise, got %s paise",
-            order.id,
-            expected_amount,
-            amount,
-        )
+        logger.warning("Payment amount mismatch for order %s: expected %s paise, got %s paise", order.id, expected_amount, amount)
+        Order.objects.filter(id=order.id).update(requires_manual_review=True)
         return False
 
     existing_payment = Payment.objects.filter(razorpay_payment_id=payment_id, status="SUCCESS").first()

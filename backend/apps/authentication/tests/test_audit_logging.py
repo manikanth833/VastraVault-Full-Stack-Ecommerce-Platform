@@ -34,6 +34,9 @@ class AuditLoggingTests(TestCase):
             password="StrongPass123!",
         )
 
+        self.user.is_email_verified = True
+        self.user.save(update_fields=["is_email_verified"])
+
     def login(self, email, password):
         return self.client.post(self.login_url, {"email": email, "password": password}, format="json")
 
