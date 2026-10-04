@@ -16,6 +16,8 @@ export default function Cart() {
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState("");
   const [couponSuccess, setCouponSuccess] = useState("");
+  const [couponPreview, setCouponPreview] = useState(null);
+  const hasItems = cart?.items?.length > 0;
 
   useEffect(() => {
     dispatch(fetchCart());
@@ -45,12 +47,40 @@ export default function Cart() {
         amount: parseFloat(cart.subtotal),
       });
       setAppliedCoupon(res.data);
+      setCouponPreview(null);
       setCouponSuccess(`Coupon ${res.data.code} applied! Discount of ₹${res.data.discount_amount} applied.`);
     } catch (err) {
       setAppliedCoupon(null);
+      setCouponPreview(null);
       setCouponError(err.response?.data?.error || "Invalid or expired coupon.");
     }
   };
+
+  useEffect(() => {
+    let mounted = true;
+    if (!appliedCoupon?.code || !hasItems) {
+      setCouponPreview(null);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    api.get("/api/orders/cart/preview/", {
+      params: { coupon_code: appliedCoupon.code },
+    }).then((res) => {
+      if (mounted) setCouponPreview(res.data);
+    }).catch((err) => {
+      if (mounted) {
+        setCouponPreview(null);
+        setAppliedCoupon(null);
+        setCouponError(err.response?.data?.error || "This coupon is no longer valid.");
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [appliedCoupon?.code, cart?.subtotal, hasItems]);
 
   const handleRemoveCoupon = () => {
     setAppliedCoupon(null);
@@ -59,14 +89,12 @@ export default function Cart() {
     setCouponError("");
   };
 
-  const hasItems = cart?.items?.length > 0;
-
   // Final pricing adjustments based on applied coupon
   const subtotal = parseFloat(cart?.subtotal || 0);
-  const discountAmount = appliedCoupon ? parseFloat(appliedCoupon.discount_amount) : 0;
-  const tax = parseFloat(cart?.tax || 0);
-  const shipping = parseFloat(cart?.shipping || 0);
-  const total = subtotal - discountAmount + tax + shipping;
+  const discountAmount = parseFloat(couponPreview?.discount_amount ?? (appliedCoupon ? appliedCoupon.discount_amount : 0));
+  const tax = parseFloat(couponPreview?.tax ?? cart?.tax ?? 0);
+  const shipping = parseFloat(couponPreview?.shipping ?? cart?.shipping ?? 0);
+  const total = parseFloat(couponPreview?.total ?? (subtotal - discountAmount + tax + shipping));
 
   const handleCheckout = () => {
     if (!isAuthenticated) {

@@ -329,7 +329,10 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         # 3. Calculate values
         subtotal = sum((item.quantity * item.variant.final_price for item in cart_items), Decimal("0.00"))
-        pricing = calculate_pricing(subtotal, coupon_code, strict_coupon=False)
+        try:
+            pricing = calculate_pricing(subtotal, coupon_code, strict_coupon=True)
+        except CouponPricingError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         discount_amount = pricing["discount_amount"]
         tax_amount = pricing["tax_amount"]
         shipping_charge = pricing["shipping_charge"]
@@ -341,10 +344,6 @@ class OrderViewSet(viewsets.ModelViewSet):
             razorpay_order_id = _create_razorpay_order(total_amount)
         except RazorpayOrderCreationError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-
-        if coupon_obj:
-            coupon_obj.usage_count += 1
-            coupon_obj.save(update_fields=["usage_count"])
 
         # 5. Create Order
         order = Order.objects.create(

@@ -2,7 +2,7 @@ import logging
 from decimal import Decimal
 from django.db import transaction
 
-from apps.orders.models import Cart, Notification, Order
+from apps.orders.models import Cart, Coupon, Notification, Order
 from apps.orders.tasks import send_low_stock_alert_email, send_order_confirmation_email
 from apps.products.models import ProductVariant
 from apps.payments.models import Payment
@@ -87,6 +87,15 @@ def mark_order_paid(order, payment_id, signature, amount):
         logger.info("Skipping paid transition for order %s in status %s", order.id, order.status)
         return False
 
+    coupon = None
+    if order.coupon_id:
+        coupon = Coupon.objects.select_for_update().get(pk=order.coupon_id)
+        if not coupon.is_valid(order.subtotal):
+            logger.warning("Coupon %s is no longer valid for order %s", coupon.code, order.id)
+            order.requires_manual_review = True
+            order.save(update_fields=["requires_manual_review"])
+            return False
+
     payment, _ = Payment.objects.get_or_create(
         order=order,
         defaults={
@@ -110,6 +119,10 @@ def mark_order_paid(order, payment_id, signature, amount):
         order.requires_manual_review = True
         order.save(update_fields=["requires_manual_review"])
         return False
+
+    if coupon:
+        coupon.usage_count += 1
+        coupon.save(update_fields=["usage_count"])
 
     order.status = "PROCESSING"
     order.save(update_fields=["status"])

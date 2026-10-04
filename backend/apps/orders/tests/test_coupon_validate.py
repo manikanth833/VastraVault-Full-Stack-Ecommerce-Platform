@@ -1,6 +1,5 @@
 from datetime import timedelta
 from decimal import Decimal
-import unittest
 
 from django.test import TestCase
 from django.urls import reverse
@@ -195,7 +194,6 @@ class CouponValidateTests(TestCase):
         self.assertTrue(response.data["valid"])
         self.assertEqual(Decimal(str(response.data["discount_amount"])), Decimal("0.00"))
 
-    @unittest.expectedFailure
     def test_nonnumeric_amount_does_not_500(self):
         Coupon.objects.create(
             code="SAFE",
@@ -207,5 +205,5 @@ class CouponValidateTests(TestCase):
 
         response = self._post("SAFE", "abc")
 
-        self.assertNotEqual(response.status_code, 500)
-
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.data["valid"])

@@ -5,9 +5,10 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.orders.models import Address, Cart, CartItem, Order, OrderItem
+from apps.orders.models import Address, Cart, CartItem, Coupon, Order, OrderItem
 from apps.payments.models import Payment
 from apps.products.models import Category, Inventory, Product, ProductVariant
 
@@ -57,11 +58,11 @@ class OrderCheckoutFlowTests(TestCase):
         msg = f"{order_id}|{payment_id}".encode("utf-8")
         return hmac.new(b"test-secret", msg, hashlib.sha256).hexdigest()
 
-    def _create_order(self, quantity=2):
+    def _create_order(self, quantity=2, coupon_code=""):
         CartItem.objects.create(cart=self.cart, variant=self.variant, quantity=quantity)
         response = self.client.post(
             self.order_url,
-            {"address_id": str(self.address.id)},
+            {"address_id": str(self.address.id), "coupon_code": coupon_code},
             format="json",
         )
         self.assertEqual(response.status_code, 201)
@@ -177,6 +178,56 @@ class OrderCheckoutFlowTests(TestCase):
         self.assertEqual(self.cart.items.count(), 0)
         self.assertEqual(self.inventory.stock_qty, 3)
         self.assertFalse(order.requires_manual_review)
+
+    def test_coupon_usage_counts_only_after_successful_payment(self):
+        coupon = Coupon.objects.create(
+            code="PAYONLY",
+            discount_type="FLAT",
+            value=Decimal("100.00"),
+            end_date=timezone.now() + timezone.timedelta(days=1),
+            usage_limit=1,
+        )
+        order_data = self._create_order(coupon_code=coupon.code)
+
+        coupon.refresh_from_db()
+        self.assertEqual(coupon.usage_count, 0)
+
+        failed = self._verify_payment(order_data, "pay_coupon_failed", signature="bad-signature")
+        self.assertEqual(failed.status_code, 400)
+        coupon.refresh_from_db()
+        self.assertEqual(coupon.usage_count, 0)
+
+        from unittest.mock import patch
+
+        with patch("apps.orders.tasks.send_order_confirmation_email.delay"), patch("apps.orders.tasks.send_low_stock_alert_email.delay"):
+            success = self._verify_payment(order_data, "pay_coupon_success")
+        self.assertEqual(success.status_code, 200)
+
+        coupon.refresh_from_db()
+        self.assertEqual(coupon.usage_count, 1)
+
+        duplicate = self._verify_payment(order_data, "pay_coupon_success")
+        self.assertEqual(duplicate.status_code, 200)
+        coupon.refresh_from_db()
+        self.assertEqual(coupon.usage_count, 1)
+
+    def test_checkout_rejects_coupon_that_is_invalid_at_order_creation(self):
+        Coupon.objects.create(
+            code="EXPIRED_CHECKOUT",
+            discount_type="FLAT",
+            value=Decimal("100.00"),
+            end_date=timezone.now() - timezone.timedelta(days=1),
+        )
+
+        CartItem.objects.create(cart=self.cart, variant=self.variant, quantity=2)
+        response = self.client.post(
+            self.order_url,
+            {"address_id": str(self.address.id), "coupon_code": "EXPIRED_CHECKOUT"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Order.objects.count(), 0)
 
     def test_payment_success_decrements_stock_and_clears_cart(self):
         order_data = self._create_order()
