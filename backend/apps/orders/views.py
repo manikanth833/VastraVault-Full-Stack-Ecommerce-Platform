@@ -391,3 +391,22 @@ class OrderViewSet(viewsets.ModelViewSet):
         order.status = new_status
         order.save()
         return Response(OrderSerializer(order).data)
+
+    @action(detail=True, methods=["POST"], permission_classes=[permissions.IsAuthenticated])
+    def cancel(self, request, pk=None):
+        order = self.get_object()
+
+        if order.user_id != request.user.id:
+            return Response(
+                {"error": "Only the customer who placed this order can cancel it."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if order.status != "PENDING":
+            return Response(
+                {"error": "Only pending orders can be cancelled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order.status = "CANCELLED"
+        order.save(update_fields=["status", "updated_at"])
+        return Response(OrderSerializer(order).data)

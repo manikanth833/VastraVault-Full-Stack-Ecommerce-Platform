@@ -287,6 +287,45 @@ class OrderManagementTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_customer_can_cancel_owned_pending_order(self):
+        order = self._create_order(self.customer, [(self.variant_one, 1)], "order-customer-cancel")
+        self.client.force_authenticate(user=self.customer)
+
+        response = self.client.post(
+            reverse("order-cancel", kwargs={"pk": str(order.id)}),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, "CANCELLED")
+
+    def test_customer_cannot_cancel_non_pending_order(self):
+        order = self._create_order(self.customer, [(self.variant_one, 1)], "order-customer-cancel-status")
+        order.status = "PROCESSING"
+        order.save(update_fields=["status"])
+        self.client.force_authenticate(user=self.customer)
+
+        response = self.client.post(
+            reverse("order-cancel", kwargs={"pk": str(order.id)}),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        order.refresh_from_db()
+        self.assertEqual(order.status, "PROCESSING")
+
+    def test_customer_cannot_cancel_another_customers_order(self):
+        order = self._create_order(self.customer, [(self.variant_one, 1)], "order-other-customer-cancel")
+        self.client.force_authenticate(user=self.other_customer)
+
+        response = self.client.post(
+            reverse("order-cancel", kwargs={"pk": str(order.id)}),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)
+
     def test_seller_cannot_update_status_on_order_without_their_products(self):
         order = self._create_order(self.customer, [(self.variant_two, 1)], "order-other-seller")
         self.client.force_authenticate(user=self.seller_one)
